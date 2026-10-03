@@ -1,0 +1,54 @@
+/* ---------------------------------------------------------------------------
+   Jetons — direction « index éditorial ».
+
+   Le site n'a aucune image en base. L'identité repose donc entièrement sur la
+   typographie, le filet et le blanc tournant : une revue de cinéma imprimée
+   plutôt qu'une galerie d'affiches absentes.
+
+   Parti pris assumé d'un seul thème, clair. Un programme imprimé n'a pas de
+   mode sombre ; le dupliquer aurait dilué la direction sans rien apporter.
+   --------------------------------------------------------------------------- */
+@theme {
+    /* Papier */
+    --color-paper: #F2EFE9;      /* fond général, ivoire chaud */
+    --color-paper-raised: #FBFAF7; /* cartouches, encarts */
+    --color-paper-sunk: #E7E2D8;  /* zones en creux, survols */
+
+    /* Encre */
+    --color-ink: #14141A;         /* texte principal */
+    --color-ink-soft: #55555F;    /* texte secondaire */
+    --color-ink-faint: #63636B;   /* données, mentions — 5,19:1 sur papier, 4,61:1 sur papier creusé */
+
+    /* Filets */
+    --color-rule: #D6D0C4;        /* filet fin, séparateurs */
+    --color-rule-strong: #14141A; /* filet d'accroche, gras */
+
+    /* Accent : bleu nuit de salle, employé avec parcimonie */
+    --color-night: #1F3A5F;
+    --color-night-soft: #2E5586;
+
+    /* États */
+    --color-danger: #A3281E;
+    --color-success: #1F6B45;
+    --color-warning: #7A5810;   /* ocre : 5,67:1 sur le papier */
+
+    /* Familles : une par nature d'information */
+    --font-display: "Big Shoulders Display", "Arial Narrow", sans-serif;
+    --font-body: "Spectral", Georgia, serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+
+    /* Courbes et durées */
+    --ease-page: cubic-bezier(0.22, 1, 0.36, 1);
+    --duration-fast: 160ms;
+    --duration-base: 280ms;
+    --duration-slow: 560ms;
+}
+
+:root {
+    /* Gouttière de l'index : année | titre | données */
+    --index-lead: 5.5rem;
+    --nav-height: 5rem;
+    --measure: 68ch;
+
+    color-scheme: light;
+}

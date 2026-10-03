@@ -39,3 +39,6 @@ coverage/
 **/outputs/
 **/logs/
 **/backups/
+
+# Données locales exclues de la publication
+environnement-local/www/html/wr506d/public/media/images/

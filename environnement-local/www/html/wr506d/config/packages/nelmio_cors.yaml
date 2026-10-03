@@ -1,0 +1,14 @@
+nelmio_cors:
+  defaults:
+    # TODO: retirer cineaste.theo-birost.fr une fois la migration vers generique.theo-birost.fr terminée
+    allow_origin: ['https://generique.theo-birost.fr', 'https://cineaste.theo-birost.fr']
+    allow_methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+    allow_headers: ['Content-Type', 'Authorization']
+    expose_headers: ['Link']
+    allow_credentials: true
+    max_age: 3600
+
+  paths:
+    '^/':
+      allow_origin: ['https://generique.theo-birost.fr', 'https://cineaste.theo-birost.fr']
+      allow_credentials: true
