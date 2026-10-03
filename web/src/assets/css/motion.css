@@ -1,0 +1,44 @@
+/* ---------------------------------------------------------------------------
+   Animations partagées et garde-fou « prefers-reduced-motion ».
+
+   L'essentiel du mouvement vit désormais dans Motion (directive v-reveal) et
+   dans les transitions CSS des composants. Il ne reste ici que ce qui doit
+   être global.
+   --------------------------------------------------------------------------- */
+
+@keyframes shimmer {
+    100% { transform: translateX(100%); }
+}
+
+/* ---------------------------------------------------------------------------
+   Mouvement réduit.
+
+   On neutralise ce qui bouge, sans supprimer les retours d'état (couleurs,
+   soulignements). La directive v-reveal lit la même préférence et n'anime ni
+   ne masque rien dans ce cas : voir src/motion/reveal.js.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --duration-fast: 0.01ms;
+        --duration-base: 0.01ms;
+        --duration-slow: 0.01ms;
+    }
+
+    html { scroll-behavior: auto; }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    /* Le scintillement des squelettes n'apporte rien et fatigue */
+    .skeleton::after { animation: none; display: none; }
+
+    /* Le décalage au survol d'une ligne d'index devient un simple aplat */
+    .index-row:hover,
+    .index-row:focus-visible { padding-left: 0.75rem; }
+}

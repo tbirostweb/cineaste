@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Avatar par défaut">
+  <!-- Silhouette pleine sur papier creusé : à plat, sans dégradé, comme le
+       reste de la charte. L'image est recadrée en cercle à l'affichage. -->
+  <rect width="200" height="200" fill="#E7E2D8"/>
+  <g fill="#B4AEA2">
+    <circle cx="100" cy="76" r="31"/>
+    <path d="M40 172c0-40 24-58 60-58s60 18 60 58z"/>
+  </g>
+</svg>

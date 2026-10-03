@@ -1,0 +1,23 @@
+{
+  "name": "Générique — l'index du cinéma",
+  "short_name": "Générique",
+  "description": "Un index de films, d'interprètes et de réalisateurs : titres, années, durées et distributions.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F2EFE9",
+  "theme_color": "#1F3A5F",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

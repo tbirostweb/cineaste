@@ -1,0 +1,12 @@
+# Générique — https://generique.theo-birost.fr
+User-agent: *
+Allow: /
+
+# Espaces privés / sans valeur pour l'index
+Disallow: /admin
+Disallow: /profile
+Disallow: /connexion
+Disallow: /inscription
+Disallow: /500
+
+Sitemap: https://generique.theo-birost.fr/sitemap.xml

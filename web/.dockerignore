@@ -1,0 +1,32 @@
+# Écarte du contexte de build ce qui est inutile ou volumineux.
+#
+# `.env` n'est PAS exclu, volontairement. Dokploy écrit les variables de
+# l'onglet Environment dans un .env à la racine du dépôt cloné, et c'est là que
+# Vite va les chercher au moment de `npm run build`. L'exclure produisait un
+# bundle sans aucune URL d'API : le front appelait des chemins relatifs qui
+# retombaient sur sa propre page, et plus rien ne s'affichait.
+#
+# Aucun secret n'est en jeu ici : une variable VITE_* est compilée dans le
+# JavaScript téléchargé par le navigateur, elle est publique par construction.
+# La règle « pas de .env dans l'image » vaut pour l'API, où .env.local contient
+# les identifiants de base de données.
+.env.local
+
+.git
+.gitignore
+.github
+
+node_modules
+dist
+dist-ssr
+
+.idea
+.vscode
+.DS_Store
+**/.DS_Store
+
+*.log
+npm-debug.log*
+
+README.md
+.claude

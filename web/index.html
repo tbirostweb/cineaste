@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Générique — l'index du cinéma</title>
+    <meta name="description" content="Un index de films, d'interprètes et de réalisateurs : titres, années, durées et distributions.">
+    <link rel="canonical" href="https://generique.theo-birost.fr/">
+
+    <!-- Identité visuelle -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#F2EFE9">
+    <meta name="color-scheme" content="light">
+
+    <!-- Partage social -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Générique">
+    <meta property="og:locale" content="fr_FR">
+    <meta property="og:url" content="https://generique.theo-birost.fr/">
+    <meta property="og:title" content="Générique — l'index du cinéma">
+    <meta property="og:description" content="Un index de films, d'interprètes et de réalisateurs : titres, années, durées et distributions.">
+    <meta property="og:image" content="https://generique.theo-birost.fr/og-image.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Générique — l'index du cinéma">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Générique — l'index du cinéma">
+    <meta name="twitter:description" content="Un index de films, d'interprètes et de réalisateurs : titres, années, durées et distributions.">
+    <meta name="twitter:image" content="https://generique.theo-birost.fr/og-image.jpg">
+
+    <!--
+      Polices auto-hébergées (voir src/assets/css/fonts.css) : aucune requête
+      vers un tiers, donc aucune fuite d'adresse IP et deux connexions de moins
+      sur le chemin critique. On précharge les deux fichiers réellement utilisés
+      au premier rendu.
+    -->
+    <link rel="preload" href="/fonts/big-shoulders-display-400-800-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/spectral-400-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
+
+    <!-- Le fond est peint avant l'hydratation : pas de flash blanc au chargement -->
+    <style>
+      /* Peint avant l'hydratation, pour éviter un flash au chargement.
+         Volontairement hors couche de cascade — donc prioritaire : cette
+         valeur doit rester en phase avec --color-paper dans tokens.css. */
+      html, body { background-color: #F2EFE9; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

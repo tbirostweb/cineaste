@@ -1,0 +1,15 @@
+/* ---------------------------------------------------------------------------
+   Point d'entrée CSS unique de l'application.
+
+   Ordre volontaire : Tailwind d'abord (il déclare les couches de cascade),
+   puis les polices, les jetons, la base, les composants et enfin les
+   animations — laissées hors couche pour que les surcharges
+   « prefers-reduced-motion » l'emportent sur tout le reste.
+   --------------------------------------------------------------------------- */
+@import "tailwindcss";
+
+@import "./fonts.css";
+@import "./tokens.css";
+@import "./base.css";
+@import "./components.css";
+@import "./motion.css";

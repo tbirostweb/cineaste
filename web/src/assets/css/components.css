@@ -1,0 +1,278 @@
+/* ---------------------------------------------------------------------------
+   Composants — le vocabulaire de l'index.
+   --------------------------------------------------------------------------- */
+@layer components {
+
+/* === Ligne d'index ==========================================================
+   Le composant central du site. Sans affiches à montrer, ce sont les données
+   qui font la mise en page : l'année cale la colonne de gauche, le titre
+   occupe la mesure, la durée et le genre ferment la ligne à droite.
+   ========================================================================== */
+.index-row {
+    display: grid;
+    grid-template-columns: var(--index-lead) minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0 1.5rem;
+    padding: 1.15rem 0.75rem 1.05rem;
+    border-bottom: 1px solid var(--color-rule);
+    position: relative;
+    isolation: isolate;
+    transition:
+        background-color var(--duration-fast) linear,
+        padding-left var(--duration-base) var(--ease-page);
+    cursor: pointer;
+}
+
+/* Aplat de survol, tiré depuis la gauche */
+.index-row::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-color: var(--color-paper-sunk);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--duration-base) var(--ease-page);
+}
+
+.index-row:hover::before,
+.index-row:focus-visible::before {
+    transform: scaleX(1);
+}
+
+.index-row:hover,
+.index-row:focus-visible {
+    padding-left: 1.5rem;
+}
+
+/* Barre d'accent qui apparaît au survol */
+.index-row::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background-color: var(--color-night);
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform var(--duration-base) var(--ease-page);
+}
+
+.index-row:hover::after,
+.index-row:focus-visible::after {
+    transform: scaleY(1);
+}
+
+.index-row__year {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-ink-faint);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+}
+
+.index-row__title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(1.35rem, 2.6vw, 2.1rem);
+    line-height: 0.98;
+    letter-spacing: -0.005em;
+    color: var(--color-ink);
+    transition: color var(--duration-fast) linear;
+}
+
+.index-row:hover .index-row__title {
+    color: var(--color-night);
+}
+
+.index-row__meta {
+    margin-top: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+}
+
+.index-row__trail {
+    display: flex;
+    align-items: baseline;
+    gap: 1.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@media (max-width: 44rem) {
+    .index-row {
+        grid-template-columns: var(--index-lead) minmax(0, 1fr);
+        gap: 0 1rem;
+    }
+    .index-row__trail {
+        grid-column: 2;
+        margin-top: 0.5rem;
+        gap: 1rem;
+    }
+}
+
+/* === Boutons =============================================================== */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0.85rem 1.6rem;
+    border: 1px solid var(--color-ink);
+    background: transparent;
+    color: var(--color-ink);
+    cursor: pointer;
+    transition:
+        background-color var(--duration-fast) linear,
+        color var(--duration-fast) linear,
+        border-color var(--duration-fast) linear;
+}
+
+.btn:hover:not(:disabled) {
+    background-color: var(--color-ink);
+    color: var(--color-paper);
+}
+
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-primary {
+    background-color: var(--color-ink);
+    color: var(--color-paper);
+}
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--color-night);
+    border-color: var(--color-night);
+}
+
+.btn-quiet {
+    border-color: var(--color-rule);
+    color: var(--color-ink-soft);
+}
+.btn-quiet:hover:not(:disabled) {
+    border-color: var(--color-ink);
+    background-color: transparent;
+    color: var(--color-ink);
+}
+
+.btn-danger {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+}
+.btn-danger:hover:not(:disabled) {
+    background-color: var(--color-danger);
+    color: var(--color-paper);
+}
+
+/* === Champs =============================================================== */
+.field {
+    width: 100%;
+    padding: 0.9rem 0;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--color-rule);
+    color: var(--color-ink);
+    font-family: var(--font-display);
+    font-size: clamp(1.25rem, 3vw, 2rem);
+    text-transform: uppercase;
+    letter-spacing: -0.005em;
+    transition: border-color var(--duration-fast) linear;
+}
+.field::placeholder { color: var(--color-ink-faint); }
+.field:focus {
+    outline: none;
+    border-bottom-color: var(--color-ink);
+}
+
+.field-inline {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    letter-spacing: 0.06em;
+    padding: 0.55rem 0;
+}
+
+/* === Étiquette de genre =================================================== */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.28rem 0.6rem;
+    border: 1px solid var(--color-rule);
+    color: var(--color-ink-soft);
+    background: transparent;
+    transition:
+        border-color var(--duration-fast) linear,
+        color var(--duration-fast) linear;
+    cursor: pointer;
+}
+.chip:hover { border-color: var(--color-ink); color: var(--color-ink); }
+.chip[aria-pressed="true"],
+.chip.is-active {
+    background-color: var(--color-ink);
+    border-color: var(--color-ink);
+    color: var(--color-paper);
+}
+
+/* === Cartouche (encart de données) ======================================== */
+.slab {
+    background-color: var(--color-paper-raised);
+    border: 1px solid var(--color-rule);
+    padding: 1.5rem;
+}
+
+/* === Tableau de données d'une fiche ======================================= */
+.spec {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.5rem 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+}
+.spec dt {
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+    font-size: 0.6875rem;
+    padding-top: 0.15rem;
+}
+.spec dd {
+    margin: 0;
+    color: var(--color-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+/* === Squelettes =========================================================== */
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--color-paper-sunk);
+}
+.skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+    animation: shimmer 1.5s var(--ease-page) infinite;
+}
+
+}
