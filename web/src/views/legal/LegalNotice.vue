@@ -8,19 +8,19 @@ import LegalPage from './LegalPage.vue'
             <h2>Éditeur du site</h2>
             <p>
                 Le site <strong>Générique</strong> (generique.theo-birost.fr) est édité
-                par <span class="todo">NOM ET PRÉNOM / RAISON SOCIALE</span>,
-                <span class="todo">STATUT JURIDIQUE</span>.
+                par Théo Birost (nom commercial « Birostweb »),
+                entrepreneur individuel (EI).
             </p>
             <ul>
-                <li>Adresse : <span class="todo">ADRESSE POSTALE</span></li>
-                <li>Contact : <span class="todo">ADRESSE E-MAIL DE CONTACT</span></li>
+                <li>Adresse : 6 rue Georges Guynemer, 10450 Bréviandes</li>
+                <li>Contact : <a href="mailto:contact@theo-birost.fr">contact@theo-birost.fr</a></li>
                 <li>
                     Numéro SIREN / SIRET :
-                    <span class="todo">À COMPLÉTER SI ACTIVITÉ DÉCLARÉE</span>
+                    SIREN 108 892 993 · SIRET (siège) 108 892 993 00016
                 </li>
                 <li>
                     Directeur de la publication :
-                    <span class="todo">NOM DU DIRECTEUR DE PUBLICATION</span>
+                    Théo Birost
                 </li>
             </ul>
         </section>
@@ -58,7 +58,7 @@ import LegalPage from './LegalPage.vue'
                 Toute reproduction ou représentation, totale ou partielle, du site à
                 d'autres fins est soumise à l'autorisation préalable de l'éditeur.
                 Pour toute demande de retrait d'un contenu, écrivez à
-                <span class="todo">ADRESSE E-MAIL DE CONTACT</span>.
+                <a href="mailto:contact@theo-birost.fr">contact@theo-birost.fr</a>.
             </p>
         </section>
 

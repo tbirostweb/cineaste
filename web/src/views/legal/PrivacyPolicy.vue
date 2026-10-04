@@ -22,9 +22,9 @@ const label = {
             <p>
                 Le responsable du traitement des données collectées sur
                 generique.theo-birost.fr est
-                <span class="todo">NOM ET PRÉNOM / RAISON SOCIALE</span>.
+                Théo Birost (Birostweb, entrepreneur individuel).
                 Pour toute question relative à vos données :
-                <span class="todo">ADRESSE E-MAIL DE CONTACT</span>.
+                <a href="mailto:contact@theo-birost.fr">contact@theo-birost.fr</a>.
             </p>
         </section>
 
@@ -145,7 +145,7 @@ const label = {
                 </li>
                 <li>
                     Pour toute autre demande, écrivez à
-                    <span class="todo">ADRESSE E-MAIL DE CONTACT</span>. Une réponse
+                    <a href="mailto:contact@theo-birost.fr">contact@theo-birost.fr</a>. Une réponse
                     vous sera apportée sous un mois.
                 </li>
             </ul>
