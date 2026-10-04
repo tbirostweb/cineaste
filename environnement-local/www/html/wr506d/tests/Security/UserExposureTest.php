@@ -196,6 +196,41 @@ final class UserExposureTest extends KernelTestCase
         self::assertTrue($found, "L'opération GetCollection de User est introuvable.");
     }
 
+    /**
+     * Toute opération GraphQL de toute ressource porte une expression security.
+     *
+     * Sans `graphQlOperations` explicites, API Platform générait requêtes et
+     * mutations sans aucune sécurité : la liste des comptes était lisible en
+     * GET anonyme sur /api/graphql et tout inscrit pouvait muter le catalogue.
+     */
+    #[DataProvider('allResources')]
+    public function testEveryGraphQlOperationDeclaresSecurity(string $resourceClass): void
+    {
+        self::bootKernel();
+
+        /** @var ResourceMetadataCollectionFactoryInterface $factory */
+        $factory = self::getContainer()->get(ResourceMetadataCollectionFactoryInterface::class);
+
+        foreach ($factory->create($resourceClass) as $resource) {
+            foreach ($resource->getGraphQlOperations() ?? [] as $name => $operation) {
+                self::assertNotEmpty(
+                    $operation->getSecurity(),
+                    sprintf("L'opération GraphQL « %s » de %s n'a pas d'expression security.", $name, $resourceClass)
+                );
+            }
+        }
+    }
+
+    /** @return iterable<string, array{class-string}> */
+    public static function allResources(): iterable
+    {
+        yield from self::guardedResources();
+        yield 'Actor' => [\App\Entity\Actor::class];
+        yield 'Category' => [\App\Entity\Category::class];
+        yield 'Director' => [\App\Entity\Director::class];
+        yield 'Movie' => [\App\Entity\Movie::class];
+    }
+
     /** @return iterable<string, array{class-string}> */
     public static function guardedResources(): iterable
     {

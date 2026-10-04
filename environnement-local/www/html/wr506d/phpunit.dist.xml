@@ -15,6 +15,9 @@
         <ini name="error_reporting" value="-1" />
         <server name="APP_ENV" value="test" force="true" />
         <server name="SHELL_VERBOSITY" value="-1" />
+        <!-- Base jetable des tests d'intégration (recréée par FunctionalTestCase). -->
+        <env name="DATABASE_URL" value="sqlite:///%kernel.project_dir%/var/test.db" />
+        <env name="TRUSTED_PROXIES" value="127.0.0.1" />
     </php>
 
     <testsuites>

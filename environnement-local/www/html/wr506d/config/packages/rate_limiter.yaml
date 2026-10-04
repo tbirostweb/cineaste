@@ -11,3 +11,11 @@ framework:
             policy: 'fixed_window'
             limit: 100 # Cette limite sert de fallback, mais sera surchargée par la valeur de l'utilisateur
             interval: '1 minute'
+
+        # Vérifications de double authentification (setup, enable, disable,
+        # login/verify), par compte : un code à 6 chiffres ne doit pas pouvoir
+        # être deviné par essais successifs.
+        two_factor:
+            policy: 'sliding_window'
+            limit: 5
+            interval: '5 minutes'

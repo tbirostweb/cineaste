@@ -4,6 +4,10 @@ namespace App\Entity;
 
 use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
 use ApiPlatform\Metadata\ApiFilter;
+use ApiPlatform\Metadata\GraphQl\DeleteMutation;
+use ApiPlatform\Metadata\GraphQl\Mutation;
+use ApiPlatform\Metadata\GraphQl\Query;
+use ApiPlatform\Metadata\GraphQl\QueryCollection;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
@@ -47,7 +51,32 @@ use DateTimeImmutable;
             security: "is_granted('ROLE_ADMIN')"
         ),
         new Delete(security: "is_granted('ROLE_ADMIN')")
-    ]
+    ],
+    // GraphQL : mêmes règles et mêmes groupes que REST. Sans liste explicite,
+    // API Platform générait requêtes et mutations SANS expression de sécurité.
+    graphQlOperations: [
+        new Query(
+            normalizationContext: ['groups' => ['movie:read']],
+            security: "is_granted('ROLE_USER')"
+        ),
+        new QueryCollection(
+            normalizationContext: ['groups' => ['movie:list']],
+            security: "is_granted('PUBLIC_ACCESS')"
+        ),
+        new Mutation(
+            name: 'create',
+            normalizationContext: ['groups' => ['movie:read']],
+            denormalizationContext: ['groups' => ['movie:write']],
+            security: "is_granted('ROLE_ADMIN')"
+        ),
+        new Mutation(
+            name: 'update',
+            normalizationContext: ['groups' => ['movie:read']],
+            denormalizationContext: ['groups' => ['movie:write']],
+            security: "is_granted('ROLE_ADMIN')"
+        ),
+        new DeleteMutation(name: 'delete', security: "is_granted('ROLE_ADMIN')"),
+    ],
 )]
 #[ApiFilter(SearchFilter::class, properties: [
     'name' => 'start',

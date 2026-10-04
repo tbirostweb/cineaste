@@ -23,11 +23,13 @@ RUN apt-get update && apt-get install -y \
     zip \
     gd \
     opcache \
-    && a2enmod rewrite \
+    && a2enmod rewrite headers \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Installation de Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Version majeure figée (plus de `latest` imprévisible) ; épingler le digest
+# lors du prochain build validé.
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Configuration Apache
 RUN echo '<VirtualHost *:80>\n\
@@ -37,6 +39,16 @@ RUN echo '<VirtualHost *:80>\n\
         AllowOverride All\n\
         Require all granted\n\
         FallbackResource /index.php\n\
+    </Directory>\n\
+    <Directory /var/www/html/public/media>\n\
+        AllowOverride None\n\
+        Options -ExecCGI -Indexes\n\
+        php_admin_flag engine off\n\
+        RemoveHandler .php .phtml .phar\n\
+        <FilesMatch "[.](php|phtml|phar|html?|svg)$">\n\
+            Require all denied\n\
+        </FilesMatch>\n\
+        Header always set X-Content-Type-Options nosniff\n\
     </Directory>\n\
     ErrorLog ${APACHE_LOG_DIR}/error.log\n\
     CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
@@ -122,9 +134,13 @@ if [ ! -f config/jwt/private.pem ]; then\n\
 fi\n\
 \n\
 # Migrations en production\n\
-if [ "$APP_ENV" = "prod" ]; then\n\
+# Plus de `|| true` : une migration en échec arrête le conteneur (set -e)\n\
+# au lieu de servir le trafic sur un schéma incohérent. Sauvegarder la base\n\
+# AVANT tout déploiement contenant une migration (cf. README).\n\
+# RUN_MIGRATIONS=0 permet de les exécuter à part, en job contrôlé.\n\
+if [ "$APP_ENV" = "prod" ] && [ "${RUN_MIGRATIONS:-1}" = "1" ]; then\n\
     echo "📊 Running migrations..."\n\
-    php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || true\n\
+    php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration\n\
 fi\n\
 \n\
 # Vider et réchauffer le cache\n\

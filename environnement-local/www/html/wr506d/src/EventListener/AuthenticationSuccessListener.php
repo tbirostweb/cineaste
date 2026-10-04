@@ -3,13 +3,18 @@
 namespace App\EventListener;
 
 use App\Entity\User;
+use App\Security\AuthCookieManager;
 use Lexik\Bundle\JWTAuthenticationBundle\Event\AuthenticationSuccessEvent;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 
 class AuthenticationSuccessListener
 {
+    /** Durée de vie du jeton intermédiaire de 2FA (secondes). */
+    public const PENDING_TTL = 300;
+
     public function __construct(
-        private readonly JWTTokenManagerInterface $jwtManager
+        private readonly JWTTokenManagerInterface $jwtManager,
+        private readonly AuthCookieManager $cookieManager,
     ) {
     }
 
@@ -22,23 +27,46 @@ class AuthenticationSuccessListener
             return;
         }
 
-        // Si le 2FA est activé pour cet utilisateur
+        // Si le 2FA est activé pour cet utilisateur : aucun jeton de session
+        // n'est émis (ni corps, ni cookie). Seul un jeton intermédiaire court,
+        // utilisable uniquement sur /api/2fa/login/verify, est renvoyé.
         if ($user->isTwoFactorEnabled()) {
-            // On vide les données standard (le token final)
-            $data = [];
+            $token = $this->jwtManager->createFromPayload($user, [
+                '2fa_pending' => true,
+                'exp' => time() + self::PENDING_TTL,
+            ]);
 
-            // On génère un token temporaire avec un claim spécifique "2fa_pending"
-            // On ne touche pas aux rôles ici pour éviter les conflits, on ajoute juste un claim custom
-            $payload = ['2fa_pending' => true];
+            $event->setData([
+                'token' => $token,
+                '2fa_required' => true,
+            ]);
 
-            // On crée le token
-            $token = $this->jwtManager->createFromPayload($user, $payload);
-
-            // On renvoie ce token temporaire et un flag pour le front
-            $data['token'] = $token;
-            $data['2fa_required'] = true;
-
-            $event->setData($data);
+            return;
         }
+
+        // Session ouverte : le JWT part dans un cookie HttpOnly, jamais dans
+        // le corps de la réponse (donc jamais dans le stockage du navigateur).
+        $jwt = $data['token'] ?? null;
+        if (\is_string($jwt)) {
+            $event->getResponse()->headers->setCookie($this->cookieManager->create($jwt));
+        }
+
+        unset($data['token']);
+        $data['session'] = self::sessionSummary($user, $this->cookieManager->ttl());
+        $event->setData($data);
+    }
+
+    /**
+     * Résumé non sensible destiné à l'affichage côté front (rôles, expiration).
+     * L'autorisation reste décidée par l'API à chaque requête.
+     *
+     * @return array{roles: list<string>, expiresAt: int}
+     */
+    public static function sessionSummary(User $user, int $ttl): array
+    {
+        return [
+            'roles' => array_values($user->getRoles()),
+            'expiresAt' => time() + $ttl,
+        ];
     }
 }

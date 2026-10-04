@@ -2,6 +2,14 @@
 framework:
     secret: '%env(APP_SECRET)%'
 
+    # Derrière Traefik (Dokploy), sans proxy de confiance, getClientIp()
+    # renvoie l'IP du proxy : tous les visiteurs partageaient alors le même
+    # quota anonyme et le même compteur de tentatives de connexion.
+    # TRUSTED_PROXIES : IP/CIDR du réseau Docker du proxy (ex. 10.0.0.0/8),
+    # à renseigner dans l'onglet Environment de Dokploy.
+    trusted_proxies: '%env(TRUSTED_PROXIES)%'
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port']
+
     # Note that the session will be started ONLY if you read or write from it.
     session: true
 

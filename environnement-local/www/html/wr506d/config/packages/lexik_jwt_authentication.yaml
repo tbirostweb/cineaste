@@ -10,3 +10,22 @@ lexik_jwt_authentication:
     # de sécurité. Elle doit être lisible dans la configuration, pas découverte
     # dans la documentation d'une dépendance le jour d'un incident.
     token_ttl: 3600
+
+    # Le navigateur présente le jeton par cookie HttpOnly (posé par
+    # AuthenticationSuccessListener, effacé par /api/logout) ; l'en-tête
+    # Authorization reste accepté pour les clients non navigateur.
+    token_extractors:
+        authorization_header:
+            enabled: true
+            prefix: Bearer
+            name: Authorization
+        cookie:
+            enabled: true
+            name: BEARER
+
+    # Liste de blocage : un jeton présenté à /api/logout (ou le jeton
+    # intermédiaire 2FA une fois consommé) est refusé jusqu'à son expiration.
+    # Chaque jeton reçoit un identifiant aléatoire `jti`.
+    blocklist_token:
+        enabled: true
+        cache: cache.app

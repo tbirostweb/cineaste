@@ -3,14 +3,19 @@
 namespace App\Controller;
 
 use App\Entity\User;
+use App\EventListener\AuthenticationSuccessListener;
+use App\Security\AuthCookieManager;
 use App\Service\TwoFactorService;
-use Psr\Log\LoggerInterface;
 use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Exception\MissingClaimException;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\BlockedTokenManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
+use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
@@ -21,50 +26,58 @@ class TwoFactorController extends AbstractController
     public function __construct(
         private readonly TwoFactorService $twoFactorService,
         private readonly EntityManagerInterface $entityManager,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly RateLimiterFactory $twoFactorLimiter,
+        private readonly AuthCookieManager $cookieManager,
     ) {
     }
 
     /**
-     * Étape 1 : Setup - Génération du QR code
+     * Étape 1 : Setup - génération d'un secret EN ATTENTE et de son QR code.
+     *
+     * POST uniquement (un GET pouvait être déclenché par un simple lien ou une
+     * image). Le secret actif, l'état activé et les codes de secours ne sont
+     * jamais modifiés ici : la bascule n'a lieu qu'après confirmation (/enable).
+     * Si la 2FA est déjà active, un code valide du facteur actuel est exigé.
      */
-    #[Route('/setup', name: 'app_2fa_setup', methods: ['POST', 'GET'])] // Temporairement GET pour le debug
+    #[Route('/setup', name: 'app_2fa_setup', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
-    public function setup(): JsonResponse
+    public function setup(Request $request): JsonResponse
     {
-        try {
-            $user = $this->getUser();
+        $user = $this->getUser();
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'User not found'], 401);
+        }
 
-            if (!$user instanceof User) {
-                return $this->json(['error' => 'User not found'], 401);
+        if (null !== $limited = $this->consumeQuota($user)) {
+            return $limited;
+        }
+
+        if ($user->isTwoFactorEnabled()) {
+            $code = $this->readCode($request);
+            if ('' === $code || !$this->verifyCurrentFactor($user, $code, consumeBackup: false)) {
+                $this->recordFailure($user);
+
+                return $this->json([
+                    'error' => 'current_code_required',
+                    'message' => 'Saisissez un code valide de votre application actuelle pour la remplacer.',
+                ], 403);
             }
+        }
 
-            // Nettoyage préventif : on s'assure qu'on repart de zéro
-            $user->setTwoFactorEnabled(false);
-            $user->setTwoFactorBackupCodes(null);
-
-            // Génération du NOUVEAU secret TOTP
+        try {
             $secret = $this->twoFactorService->generateSecret();
-            $user->setTwoFactorSecret($secret);
-
+            $user->setTwoFactorPendingSecret($secret);
             $this->entityManager->flush();
-
-            // Génération du QR code
-            $qrCodeDataUri = $this->twoFactorService->getQrCode($user);
-            // URL de provisioning générée par le module OTP
-            $provisioningUri = $this->twoFactorService->getProvisioningUri($user);
 
             return $this->json([
                 'secret' => $secret,
-                'qr_code' => $qrCodeDataUri,
-                'provisioning_uri' => $provisioningUri,
+                'qr_code' => $this->twoFactorService->getQrCode($user, $secret),
+                'provisioning_uri' => $this->twoFactorService->getProvisioningUri($user, $secret),
                 'message' => 'Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)',
             ]);
         } catch (\Throwable $e) {
-            // La trace d'exception ne doit jamais sortir de l'application :
-            // elle révèle les chemins du serveur, les versions et la structure
-            // interne. Elle part dans les journaux, le client reçoit un
-            // message générique.
+            // La trace d'exception ne doit jamais sortir de l'application.
             $this->logger->error('Échec du paramétrage 2FA', ['exception' => $e]);
 
             return $this->json([
@@ -74,65 +87,72 @@ class TwoFactorController extends AbstractController
     }
 
     /**
-     * Étape 2 : Enable - Vérification et activation du 2FA
+     * Étape 2 : Enable - vérification du code du secret en attente, puis bascule
+     * atomique (secret actif remplacé, nouveaux codes de secours, sessions
+     * antérieures révoquées, nouvelle session émise pour l'appelant).
      */
     #[Route('/enable', name: 'app_2fa_enable', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
-    public function enable(Request $request): JsonResponse
+    public function enable(Request $request, JWTTokenManagerInterface $jwtManager): JsonResponse
     {
-        /** @var User $user */
         $user = $this->getUser();
-
         if (!$user instanceof User) {
             return $this->json(['error' => 'User not found'], 401);
         }
 
-        // Vérifier que le setup a été fait
-        if (!$user->getTwoFactorSecret()) {
-            return $this->json([
-                'error' => 'Please call /api/2fa/setup first'
-            ], 400);
+        if (null !== $limited = $this->consumeQuota($user)) {
+            return $limited;
         }
 
-        $data = json_decode($request->getContent(), true);
-        $code = $data['code'] ?? '';
+        $pendingSecret = $user->getTwoFactorPendingSecret();
+        if (!$pendingSecret) {
+            return $this->json(['error' => 'Please call /api/2fa/setup first'], 400);
+        }
 
-        if (empty($code)) {
+        $code = $this->readCode($request);
+        if ('' === $code) {
             return $this->json(['error' => 'Code is required'], 400);
         }
 
-        // Vérifier le code TOTP
-        if (!$this->twoFactorService->verifyCode($user, $code)) {
+        // Le compteur anti-rejeu repart de zéro pour un nouveau secret.
+        $previousTimestep = $user->getTwoFactorAuth()?->getLastUsedTimestep();
+        $user->getTwoFactorAuth()?->setLastUsedTimestep(null);
+        if (!$this->twoFactorService->verifyCode($user, $code, $pendingSecret)) {
+            $user->getTwoFactorAuth()?->setLastUsedTimestep($previousTimestep);
+            $this->recordFailure($user);
+
             return $this->json(['error' => 'Invalid code'], 400);
         }
 
-        // Générer les codes de secours
         $backupCodes = $this->twoFactorService->generateBackupCodes();
-        $hashedBackupCodes = $this->twoFactorService->hashBackupCodes($backupCodes);
 
-        // Activer le 2FA
-        $user->setTwoFactorEnabled(true);
-        $user->setTwoFactorBackupCodes($hashedBackupCodes);
+        $this->entityManager->wrapInTransaction(function () use ($user, $pendingSecret, $backupCodes): void {
+            $user->setTwoFactorSecret($pendingSecret);
+            $user->setTwoFactorPendingSecret(null);
+            $user->setTwoFactorBackupCodes($this->twoFactorService->hashBackupCodes($backupCodes));
+            $user->setTwoFactorEnabled(true);
+            $user->revokeTokens();
+        });
 
-        $this->entityManager->flush();
-
-        return $this->json([
+        $response = $this->json([
             'message' => '2FA enabled successfully',
             'backup_codes' => $backupCodes,
             'warning' => 'Save these backup codes in a safe place. They will not be shown again!',
+            'session' => AuthenticationSuccessListener::sessionSummary($user, $this->cookieManager->ttl()),
         ]);
+        $response->headers->setCookie($this->cookieManager->create($jwtManager->create($user)));
+
+        return $response;
     }
 
     /**
-     * Désactiver le 2FA
+     * Désactiver le 2FA (code TOTP ou code de secours exigé).
      */
     #[Route('/disable', name: 'app_2fa_disable', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
     public function disable(Request $request): JsonResponse
     {
-        /** @var User $user */
         $user = $this->getUser();
-
         if (!$user instanceof User) {
             return $this->json(['error' => 'User not found'], 401);
         }
@@ -141,25 +161,27 @@ class TwoFactorController extends AbstractController
             return $this->json(['error' => '2FA is not enabled'], 400);
         }
 
-        $data = json_decode($request->getContent(), true);
-        $code = $data['code'] ?? '';
+        if (null !== $limited = $this->consumeQuota($user)) {
+            return $limited;
+        }
 
-        if (empty($code)) {
+        $code = $this->readCode($request);
+        if ('' === $code) {
             return $this->json(['error' => 'Code is required to disable 2FA'], 400);
         }
 
-        // Vérifier le code avant de désactiver (TOTP ou Backup Code)
-        $isTotpValid = $this->twoFactorService->verifyCode($user, $code);
-        $isBackupValid = $this->twoFactorService->verifyBackupCode($user, $code);
+        if (!$this->verifyCurrentFactor($user, $code, consumeBackup: false)) {
+            $this->recordFailure($user);
 
-        if (!$isTotpValid && !$isBackupValid) {
             return $this->json(['error' => 'Invalid code'], 400);
         }
 
         // Désactiver et supprimer toutes les données 2FA
         $user->setTwoFactorEnabled(false);
         $user->setTwoFactorSecret(null);
+        $user->setTwoFactorPendingSecret(null);
         $user->setTwoFactorBackupCodes(null);
+        $user->getTwoFactorAuth()?->setLastUsedTimestep(null);
 
         $this->entityManager->flush();
 
@@ -175,9 +197,7 @@ class TwoFactorController extends AbstractController
     #[IsGranted('ROLE_USER')]
     public function status(): JsonResponse
     {
-        /** @var User $user */
         $user = $this->getUser();
-
         if (!$user instanceof User) {
             return $this->json(['error' => 'User not found'], 401);
         }
@@ -185,62 +205,64 @@ class TwoFactorController extends AbstractController
         return $this->json([
             'enabled' => $user->isTwoFactorEnabled(),
             'secret_configured' => $user->getTwoFactorSecret() !== null,
+            'setup_pending' => $user->getTwoFactorPendingSecret() !== null,
         ]);
     }
 
     /**
-     * Étape de vérification du login 2FA
+     * Étape de vérification du login 2FA : échange le jeton intermédiaire
+     * contre une session (cookie HttpOnly). Le jeton intermédiaire est bloqué
+     * après usage.
      */
     #[Route('/login/verify', name: 'app_2fa_login_verify', methods: ['POST'])]
     public function verifyLogin(
         Request $request,
         JWTTokenManagerInterface $jwtManager,
-        TokenStorageInterface $tokenStorage
+        TokenStorageInterface $tokenStorage,
+        BlockedTokenManagerInterface $blockedTokens,
     ): JsonResponse {
         try {
-            // On vérifie que l'utilisateur est bien authentifié (même avec un token temporaire)
             $this->denyAccessUnlessGranted('IS_AUTHENTICATED_FULLY');
 
-            /** @var User $user */
             $user = $this->getUser();
+            if (!$user instanceof User) {
+                throw new AccessDeniedException('No user.');
+            }
 
-            // On vérifie que le token est bien un token temporaire 2FA
-            $token = $tokenStorage->getToken();
-            $payload = $jwtManager->decode($token);
-
-            if (!isset($payload['2fa_pending']) || $payload['2fa_pending'] !== true) {
+            $payload = $jwtManager->decode($tokenStorage->getToken());
+            if (!\is_array($payload) || true !== ($payload['2fa_pending'] ?? null)) {
                 throw new AccessDeniedException('This is not a 2FA token.');
             }
 
-            $data = json_decode($request->getContent(), true);
-            $code = $data['code'] ?? '';
+            if (null !== $limited = $this->consumeQuota($user)) {
+                return $limited;
+            }
 
-            if (empty($code)) {
+            $code = $this->readCode($request);
+            if ('' === $code) {
                 return $this->json(['error' => 'Code is required'], 400);
             }
 
-            // Vérifier le code TOTP ou un code de secours
-            $isTotpValid = $this->twoFactorService->verifyCode($user, $code);
-            $isBackupValid = $this->twoFactorService->verifyBackupCode($user, $code);
+            if (!$this->verifyCurrentFactor($user, $code, consumeBackup: true)) {
+                $this->recordFailure($user);
 
-            if (!$isTotpValid && !$isBackupValid) {
                 return $this->json(['error' => 'Invalid code'], 400);
             }
+            $this->entityManager->flush();
 
-            // Si un code de secours a été utilisé, on le supprime
-            if ($isBackupValid) {
-                $this->twoFactorService->removeBackupCode($user, $code);
-                $this->entityManager->flush();
+            try {
+                $blockedTokens->add($payload);
+            } catch (MissingClaimException) {
+                // Jeton sans jti (émis avant la liste de blocage) : il expire seul.
             }
 
-            // Le code est valide, on génère le token JWT final
-            // On enlève le claim '2fa_pending' pour le token final
-            $finalToken = $jwtManager->create($user);
+            $response = $this->json([
+                'session' => AuthenticationSuccessListener::sessionSummary($user, $this->cookieManager->ttl()),
+            ]);
+            $response->headers->setCookie($this->cookieManager->create($jwtManager->create($user)));
 
-            return $this->json(['token' => $finalToken]);
-        } catch (AccessDeniedException $e) {
-            // Jeton qui n'est pas un jeton d'attente 2FA : c'est un refus,
-            // pas une panne.
+            return $response;
+        } catch (AccessDeniedException) {
             return $this->json(['error' => 'Jeton de vérification invalide.'], 403);
         } catch (\Throwable $e) {
             $this->logger->error('Échec de la vérification 2FA', ['exception' => $e]);
@@ -249,5 +271,64 @@ class TwoFactorController extends AbstractController
                 'error' => 'La vérification a échoué. Réessayez de vous connecter.',
             ], 500);
         }
+    }
+
+    /**
+     * Vérifie un code du facteur ACTIF : TOTP (anti-rejeu) ou code de secours.
+     * Un code de secours n'est consommé que lors de la connexion.
+     */
+    private function verifyCurrentFactor(User $user, string $code, bool $consumeBackup): bool
+    {
+        if ($this->twoFactorService->verifyCode($user, $code)) {
+            $this->entityManager->flush();
+
+            return true;
+        }
+
+        if ($this->twoFactorService->verifyBackupCode($user, $code)) {
+            if ($consumeBackup) {
+                $this->twoFactorService->removeBackupCode($user, $code);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Quota dédié aux vérifications 2FA, par compte : seuls les ÉCHECS sont
+     * comptés (5 par 5 minutes glissantes). Au-delà, toute vérification est
+     * refusée en 429 jusqu'à libération de la fenêtre.
+     */
+    private function consumeQuota(User $user): ?JsonResponse
+    {
+        $limit = $this->limiter($user)->consume(0);
+        if ($limit->getRemainingTokens() > 0) {
+            return null;
+        }
+
+        return $this->json([
+            'error' => 'too_many_attempts',
+            'message' => 'Trop de tentatives. Réessayez plus tard.',
+        ], 429, ['Retry-After' => max(1, $limit->getRetryAfter()->getTimestamp() - time())]);
+    }
+
+    private function recordFailure(User $user): void
+    {
+        $this->limiter($user)->consume(1);
+    }
+
+    private function limiter(User $user): \Symfony\Component\RateLimiter\LimiterInterface
+    {
+        return $this->twoFactorLimiter->create('2fa-'.$user->getUserIdentifier());
+    }
+
+    private function readCode(Request $request): string
+    {
+        $data = json_decode($request->getContent(), true);
+        $code = \is_array($data) ? ($data['code'] ?? '') : '';
+
+        return \is_scalar($code) ? trim((string) $code) : '';
     }
 }

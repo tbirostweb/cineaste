@@ -46,6 +46,12 @@ final class UserPasswordProcessor implements ProcessorInterface
 
             if (null !== $plainPassword && '' !== trim($plainPassword)) {
                 $data->setPassword($this->hasher->hashPassword($data, $plainPassword));
+
+                // Changement de mot de passe d'un compte existant : les
+                // sessions ouvertes avec l'ancien sont révoquées.
+                if (null !== $data->getId()) {
+                    $data->revokeTokens();
+                }
             }
 
             // Vidé dans tous les cas : le mot de passe en clair ne doit pas

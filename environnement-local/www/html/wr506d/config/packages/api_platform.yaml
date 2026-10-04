@@ -5,6 +5,9 @@ api_platform:
     show_webby: false
     graphql:
         enabled: true
+        # Bornes contre les requêtes imbriquées coûteuses (déni de service).
+        max_query_depth: 10
+        max_query_complexity: 300
     defaults:
         pagination_enabled: true
         pagination_items_per_page: 16
@@ -34,3 +37,13 @@ api_platform:
     formats:
         jsonld: [ 'application/ld+json' ]
         multipart: [ 'multipart/form-data' ]
+
+# En production : ni IDE GraphiQL ni introspection du schéma. Les opérations
+# restent disponibles, protégées par les mêmes expressions de sécurité que REST.
+when@prod:
+    api_platform:
+        graphql:
+            graphiql:
+                enabled: false
+            introspection:
+                enabled: false

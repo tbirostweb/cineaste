@@ -1,3 +1,8 @@
+# DÉVELOPPEMENT LOCAL UNIQUEMENT — ne pas déployer ce fichier.
+# Il monte tout le code source dans le conteneur et publie Nginx. La
+# production utilise le Dockerfile (Dokploy). Les mots de passe n'ont plus de
+# valeur par défaut : les définir dans un .env local non versionné
+# (noms documentés dans .env.example).
 services:
   php:
     build:
@@ -9,7 +14,7 @@ services:
     # On laisse Symfony utiliser le .env.local via le volume monté,
     # mais on définit quand même une valeur par défaut compatible ici au cas où.
     environment:
-      DATABASE_URL: mysql://${MARIADB_USER:-symfony}:${MARIADB_PASSWORD:-PASSWORD}@symfony-db-2025:3306/${MARIADB_DATABASE:-symfony}?serverVersion=${MARIADB_VERSION:-10.8.8-MariaDB}&charset=utf8mb4
+      DATABASE_URL: mysql://${MARIADB_USER:-symfony}:${MARIADB_PASSWORD:?définir MARIADB_PASSWORD}@symfony-db-2025:3306/${MARIADB_DATABASE:-symfony}?serverVersion=${MARIADB_VERSION:-10.8.8-MariaDB}&charset=utf8mb4
     depends_on:
       symfony-db-2025:
         condition: service_healthy
@@ -18,7 +23,8 @@ services:
     image: nginx:alpine
     restart: always
     ports:
-      - "8000:80"
+      # Lié à la boucle locale : jamais exposé sur le réseau.
+      - "127.0.0.1:8000:80"
     volumes:
       - ./:/var/www/html
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
@@ -30,9 +36,9 @@ services:
     image: mariadb:${MARIADB_VERSION:-10.8.8}
     environment:
       MARIADB_DATABASE: ${MARIADB_DATABASE:-symfony}
-      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-PASSWORD}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?définir MARIADB_PASSWORD}
       MARIADB_USER: ${MARIADB_USER:-symfony}
-      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?définir MARIADB_ROOT_PASSWORD}
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       timeout: 5s

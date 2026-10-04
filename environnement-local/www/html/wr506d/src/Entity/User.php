@@ -2,6 +2,10 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Metadata\GraphQl\DeleteMutation;
+use ApiPlatform\Metadata\GraphQl\Mutation;
+use ApiPlatform\Metadata\GraphQl\Query;
+use ApiPlatform\Metadata\GraphQl\QueryCollection;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
@@ -14,6 +18,7 @@ use App\State\UserPasswordProcessor;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Validator\Constraints as Assert;
@@ -23,6 +28,7 @@ use DateTimeImmutable;
 
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: "user")]
+#[UniqueEntity(fields: ['email'], message: 'Impossible de créer ce compte avec ces informations.')]
 #[ApiResource(
     // Contexte de sérialisation déclaré au niveau de la ressource : une
     // opération qui oublierait ses groupes n'exposera plus l'intégralité des
@@ -40,7 +46,8 @@ use DateTimeImmutable;
         // passe sont assurés par UserPasswordListener.
         new Post(
             security: "is_granted('PUBLIC_ACCESS')",
-            processor: UserPasswordProcessor::class
+            processor: UserPasswordProcessor::class,
+            validationContext: ['groups' => ['Default', 'user:create']]
         ),
         // `object == user` : un compte n'accède qu'à lui-même.
         // `is_granted('ROLE_USER')` seul laissait n'importe quel inscrit lire
@@ -57,6 +64,27 @@ use DateTimeImmutable;
             processor: UserPasswordProcessor::class
         ),
         new Delete(
+            security: "is_granted('ROLE_ADMIN') or object == user"
+        ),
+    ],
+    // GraphQL : mêmes règles et mêmes groupes que REST. Sans liste explicite,
+    // API Platform générait requêtes et mutations SANS expression de sécurité.
+    graphQlOperations: [
+        new Query(security: "is_granted('ROLE_ADMIN') or object == user"),
+        new QueryCollection(security: "is_granted('ROLE_ADMIN')"),
+        new Mutation(
+            name: 'create',
+            security: "is_granted('PUBLIC_ACCESS')",
+            processor: UserPasswordProcessor::class,
+            validationContext: ['groups' => ['Default', 'user:create']]
+        ),
+        new Mutation(
+            name: 'update',
+            security: "is_granted('ROLE_ADMIN') or object == user",
+            processor: UserPasswordProcessor::class
+        ),
+        new DeleteMutation(
+            name: 'delete',
             security: "is_granted('ROLE_ADMIN') or object == user"
         ),
     ]
@@ -105,6 +133,24 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[Groups(['user:read', 'user:write'])]
     private ?MediaObject $photo = null;
 
+    /**
+     * Politique de mot de passe côté serveur (le front n'est qu'un confort) :
+     * 12 caractères minimum, plafond contre les charges démesurées, et refus des
+     * mots de passe présents dans des fuites connues (Have I Been Pwned, par
+     * k-anonymat : seuls les 5 premiers caractères du SHA-1 sont transmis ;
+     * un service indisponible ne bloque pas l'inscription).
+     */
+    #[Assert\NotBlank(message: 'Le mot de passe est obligatoire.', groups: ['user:create'])]
+    #[Assert\Length(
+        min: 12,
+        max: 4096,
+        minMessage: 'Le mot de passe doit contenir au moins {{ limit }} caractères.',
+        maxMessage: 'Le mot de passe est trop long.'
+    )]
+    #[Assert\NotCompromisedPassword(
+        message: 'Ce mot de passe figure dans une fuite de données connue. Choisissez-en un autre.',
+        skipOnError: true
+    )]
     #[Groups(['user:write'])]
     private ?string $plainPassword = null;
 
@@ -120,6 +166,14 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\OneToMany(mappedBy: 'user', targetEntity: Review::class, orphanRemoval: true)]
     private Collection $reviews;
+
+    /**
+     * Version des jetons de session. Elle est copiée dans chaque JWT émis ;
+     * l'incrémenter (changement de mot de passe, de rôle, de 2FA, incident)
+     * invalide immédiatement tous les jetons déjà distribués.
+     */
+    #[ORM\Column(options: ['default' => 0])]
+    private int $tokenVersion = 0;
 
 
     public function __construct()
@@ -321,6 +375,36 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
             $this->twoFactorAuth = new UserTwoFactor();
         }
         $this->twoFactorAuth->setBackupCodes($codes);
+        return $this;
+    }
+
+    // Secret en attente de confirmation : même sensibilité que le secret actif.
+    #[Ignore]
+    public function getTwoFactorPendingSecret(): ?string
+    {
+        return $this->twoFactorAuth?->getPendingSecret();
+    }
+
+    public function setTwoFactorPendingSecret(?string $secret): static
+    {
+        if ($this->twoFactorAuth === null) {
+            $this->twoFactorAuth = new UserTwoFactor();
+            $this->twoFactorAuth->setEnabled(false);
+        }
+        $this->twoFactorAuth->setPendingSecret($secret);
+        return $this;
+    }
+
+    #[Ignore]
+    public function getTokenVersion(): int
+    {
+        return $this->tokenVersion;
+    }
+
+    /** Révoque tous les jetons de session émis jusqu'ici. */
+    public function revokeTokens(): static
+    {
+        ++$this->tokenVersion;
         return $this;
     }
 

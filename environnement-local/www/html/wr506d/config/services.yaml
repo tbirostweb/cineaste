@@ -4,6 +4,14 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
+    # Cookie de session (JWT HttpOnly). Secure par défaut ; JWT_COOKIE_SECURE=0
+    # uniquement pour un poste de développement en HTTP non-localhost.
+    env(JWT_COOKIE_SECURE): '1'
+    # Strict : le front (generique.theo-birost.fr) et l'API (wr506.theo-birost.fr)
+    # sont sur le même site ; aucun besoin d'envoyer le cookie cross-site.
+    env(JWT_COOKIE_SAMESITE): 'strict'
+    # Proxys de confiance (Traefik/Dokploy) pour lire la vraie IP cliente.
+    env(TRUSTED_PROXIES): '127.0.0.1'
 
 services:
     # default configuration for services in *this* file
@@ -29,6 +37,16 @@ services:
         arguments:
             $anonymousApiLimiter: '@limiter.anonymous_api'
             $authenticatedApiLimiter: '@limiter.authenticated_api'
+
+    App\Security\AuthCookieManager:
+        arguments:
+            $secure: '%env(bool:JWT_COOKIE_SECURE)%'
+            $sameSite: '%env(JWT_COOKIE_SAMESITE)%'
+            $ttl: '%lexik_jwt_authentication.token_ttl%'
+
+    App\Controller\TwoFactorController:
+        arguments:
+            $twoFactorLimiter: '@limiter.two_factor'
 
     App\EventListener\UserPasswordListener:
         tags:

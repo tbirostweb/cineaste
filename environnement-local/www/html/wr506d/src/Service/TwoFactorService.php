@@ -4,6 +4,7 @@ namespace App\Service;
 
 use App\Entity\User;
 use OTPHP\TOTP;
+use Symfony\Component\Clock\Clock;
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
@@ -35,11 +36,11 @@ class TwoFactorService
     }
 
     /**
-     * Get TOTP instance for a user
+     * Get TOTP instance for a user (secret actif, ou secret fourni).
      */
-    private function getTOTP(User $user): TOTP
+    private function getTOTP(User $user, ?string $secret = null): TOTP
     {
-        $secret = $user->getTwoFactorSecret();
+        $secret ??= $user->getTwoFactorSecret();
         if ($secret === null) {
             throw new RuntimeException('User does not have a 2FA secret');
         }
@@ -54,17 +55,17 @@ class TwoFactorService
     /**
      * Generate provisioning URI for QR code
      */
-    public function getProvisioningUri(User $user): string
+    public function getProvisioningUri(User $user, ?string $secret = null): string
     {
-        return $this->getTOTP($user)->getProvisioningUri();
+        return $this->getTOTP($user, $secret)->getProvisioningUri();
     }
 
     /**
      * Generate QR code as base64 image data
      */
-    public function getQrCode(User $user): string
+    public function getQrCode(User $user, ?string $secret = null): string
     {
-        $provisioningUri = $this->getProvisioningUri($user);
+        $provisioningUri = $this->getProvisioningUri($user, $secret);
 
         try {
             // Tentative avec instanciation directe de Builder (compatible v4, v5, v6 si create() n'existe pas)
@@ -105,19 +106,52 @@ class TwoFactorService
     }
 
     /**
-     * Verify TOTP code
+     * Vérifie un code TOTP contre le secret actif (ou le secret fourni).
+     *
+     * Protection anti-rejeu : le pas de temps du code accepté est mémorisé et
+     * tout code d'un pas de temps égal ou antérieur est refusé ensuite.
+     * Le pas courant et ses deux voisins (±30 s) sont acceptés pour absorber
+     * une dérive d'horloge raisonnable.
      */
-    public function verifyCode(User $user, string $code): bool
+    public function verifyCode(User $user, string $code, ?string $secret = null): bool
     {
-        $secret = $user->getTwoFactorSecret();
-        if (!$secret) {
+        $secret ??= $user->getTwoFactorSecret();
+        if (!$secret || !preg_match('/^\d{6}$/', $code)) {
             return false;
         }
 
         $totp = TOTP::createFromSecret($secret);
+        $period = $totp->getPeriod();
+        $now = $this->clock();
+        $lastUsed = $user->getTwoFactorAuth()?->getLastUsedTimestep();
 
-        // Vérifie le code avec une fenêtre de ±2 (tolérance de 60 sec)
-        return $totp->verify($code, null, 2);
+        foreach ([0, -1, 1] as $offset) {
+            $timestamp = $now + $offset * $period;
+            $timestep = intdiv($timestamp, $period);
+            if (!hash_equals($totp->at($timestamp), $code)) {
+                continue;
+            }
+            if ($lastUsed !== null && $timestep <= $lastUsed) {
+                return false;
+            }
+            $user->getTwoFactorAuth()?->setLastUsedTimestep($timestep);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /** Horloge Symfony : remplaçable dans les tests (ClockSensitiveTrait). */
+    protected function clock(): int
+    {
+        return Clock::get()->now()->getTimestamp();
+    }
+
+    /** Code TOTP courant pour un secret (outil de test et de diagnostic). */
+    public function currentCode(string $secret, ?int $timestamp = null): string
+    {
+        return TOTP::createFromSecret($secret)->at($timestamp ?? $this->clock());
     }
 
     /**
@@ -149,14 +183,20 @@ class TwoFactorService
      */
     public function verifyBackupCode(User $user, string $code): bool
     {
-        $hashedCode = hash('sha256', $code);
+        $hashedCode = hash('sha256', strtoupper(trim($code)));
         $backupCodes = $user->getTwoFactorBackupCodes();
 
         if ($backupCodes === null) {
             return false;
         }
 
-        return in_array($hashedCode, $backupCodes, true);
+        foreach ($backupCodes as $storedCode) {
+            if (is_string($storedCode) && hash_equals($storedCode, $hashedCode)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -164,7 +204,7 @@ class TwoFactorService
      */
     public function removeBackupCode(User $user, string $code): void
     {
-        $hashedCode = hash('sha256', $code);
+        $hashedCode = hash('sha256', strtoupper(trim($code)));
         $backupCodes = $user->getTwoFactorBackupCodes();
 
         if ($backupCodes === null) {

@@ -50,6 +50,8 @@ security:
         # Ou mieux : on s'assure que le token temporaire donne bien un accès suffisant.
         # Ici, je mets PUBLIC_ACCESS pour éviter le 403 du firewall, la sécurité sera gérée par le token JWT valide
         - { path: ^/api/2fa/login/verify, roles: PUBLIC_ACCESS }
+        # Déconnexion idempotente : efface le cookie même sans session valide.
+        - { path: ^/api/logout, roles: PUBLIC_ACCESS }
 
         - { path: ^/api/media_objects, roles: PUBLIC_ACCESS }
         - { path: ^/api/docs, roles: PUBLIC_ACCESS }

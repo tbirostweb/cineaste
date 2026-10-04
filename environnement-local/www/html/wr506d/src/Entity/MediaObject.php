@@ -3,6 +3,8 @@
 namespace App\Entity;
 
 use ApiPlatform\Metadata\ApiProperty;
+use ApiPlatform\Metadata\GraphQl\Query;
+use ApiPlatform\Metadata\GraphQl\QueryCollection;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
@@ -49,6 +51,14 @@ use Vich\UploaderBundle\Mapping\Attribute as Vich;
                 )
             )
         )
+    ],
+    // GraphQL : mêmes règles et mêmes groupes que REST. Sans liste explicite,
+    // API Platform générait requêtes et mutations SANS expression de sécurité.
+    // L'envoi de fichier reste réservé à l'opération REST multipart : aucune
+    // mutation GraphQL n'est exposée (REST n'offre ni modification ni suppression).
+    graphQlOperations: [
+        new Query(security: "is_granted('PUBLIC_ACCESS')"),
+        new QueryCollection(security: "is_granted('PUBLIC_ACCESS')"),
     ]
 )]
 class MediaObject

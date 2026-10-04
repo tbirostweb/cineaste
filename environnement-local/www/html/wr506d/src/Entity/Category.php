@@ -2,6 +2,10 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Metadata\GraphQl\DeleteMutation;
+use ApiPlatform\Metadata\GraphQl\Mutation;
+use ApiPlatform\Metadata\GraphQl\Query;
+use ApiPlatform\Metadata\GraphQl\QueryCollection;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
 use ApiPlatform\Metadata\ApiFilter;
@@ -23,7 +27,17 @@ use DateTimeImmutable;
 
 #[ORM\Entity(repositoryClass: CategoryRepository::class)]
 #[ORM\HasLifecycleCallbacks]
-#[ApiResource]
+#[ApiResource(
+    // GraphQL : mêmes règles et mêmes groupes que REST. Sans liste explicite,
+    // API Platform générait requêtes et mutations SANS expression de sécurité.
+    graphQlOperations: [
+        new Query(security: "is_granted('PUBLIC_ACCESS')"),
+        new QueryCollection(security: "is_granted('PUBLIC_ACCESS')"),
+        new Mutation(name: 'create', security: "is_granted('ROLE_ADMIN')"),
+        new Mutation(name: 'update', security: "is_granted('ROLE_ADMIN')"),
+        new DeleteMutation(name: 'delete', security: "is_granted('ROLE_ADMIN')"),
+    ]
+)]
 #[ApiFilter(SearchFilter::class, properties: [
     'name' => 'partial',
     'movies.id' => 'exact'
