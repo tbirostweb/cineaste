@@ -17,7 +17,7 @@ function fakeDocument() {
     }
 }
 
-const ENV = { VITE_ANALYTICS_SRC: 'https://stats.example.test/js/script.js', VITE_ANALYTICS_DOMAIN: 'generique.example.test' }
+const ENV = { VITE_ANALYTICS_ENABLED: 'true', VITE_ANALYTICS_SRC: 'https://stats.example.test/js/script.js', VITE_ANALYTICS_DOMAIN: 'generique.example.test' }
 
 describe("mesure d'audience soumise au consentement", () => {
     beforeEach(() => {
@@ -28,6 +28,13 @@ describe("mesure d'audience soumise au consentement", () => {
         loadAnalytics({})
         assert.equal(document.scripts.length, 0)
         assert.equal(isAnalyticsConfigured({}), false)
+    })
+
+    it('reste désactivée quand seules les anciennes variables sont configurées', () => {
+        const { VITE_ANALYTICS_ENABLED, ...legacy } = ENV
+        loadAnalytics(legacy)
+        assert.equal(document.scripts.length, 0)
+        assert.equal(isAnalyticsConfigured(legacy), false)
     })
 
     it('retire le script et recharge la page au retrait du consentement', () => {

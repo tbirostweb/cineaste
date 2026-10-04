@@ -5,7 +5,11 @@
  * de mesure est configuré. Sans variable d'environnement, l'application
  * n'embarque aucun traceur — c'est l'état par défaut.
  *
+ * Désactivée par défaut, même si une ancienne configuration existe.
+ * L'activation exige VITE_ANALYTICS_ENABLED=true.
+ *
  * Variables attendues (onglet Environment de Dokploy) :
+ *   VITE_ANALYTICS_ENABLED true pour activer (défaut false)
  *   VITE_ANALYTICS_SRC     ex. https://plausible.example.com/js/script.js
  *   VITE_ANALYTICS_DOMAIN  ex. generique.theo-birost.fr
  */
@@ -15,7 +19,7 @@ let loaded = false
 const BUILD_ENV = import.meta.env ?? {}
 
 export function loadAnalytics(env = BUILD_ENV) {
-    if (loaded) return
+    if (loaded || !isAnalyticsConfigured(env)) return
     const src = env.VITE_ANALYTICS_SRC
     const domain = env.VITE_ANALYTICS_DOMAIN
     if (!src || !domain) return
@@ -43,5 +47,5 @@ export function unloadAnalytics(reload = () => window.location.reload(), env = B
 }
 
 export function isAnalyticsConfigured(env = BUILD_ENV) {
-    return Boolean(env.VITE_ANALYTICS_SRC && env.VITE_ANALYTICS_DOMAIN)
+    return env.VITE_ANALYTICS_ENABLED === 'true' && Boolean(env.VITE_ANALYTICS_SRC && env.VITE_ANALYTICS_DOMAIN)
 }

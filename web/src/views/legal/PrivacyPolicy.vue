@@ -41,7 +41,7 @@ const label = {
                 </thead>
                 <tbody>
                     <tr>
-                        <td>Nom, prénom, e-mail, date de naissance, photo de profil</td>
+                        <td>Nom, prénom, e-mail, photo de profil ; date de naissance facultative si renseignée dans le profil</td>
                         <td>Création et gestion du compte utilisateur</td>
                         <td>Exécution du service demandé</td>
                         <td>Jusqu'à la suppression du compte</td>
@@ -95,9 +95,9 @@ const label = {
                 votre choix en matière de mesure d'audience. Ces éléments sont
                 indispensables au fonctionnement du service et ne requièrent pas de
                 consentement. Le résumé de session et l'avatar sont effacés à la
-                déconnexion ; votre choix de mesure d'audience est conservé, afin
-                qu'un refus ne soit pas perdu, et peut être modifié à tout moment
-                ci-dessous.
+                déconnexion ; votre choix de mesure d'audience (accepté ou refusé) est
+                conservé 6 mois, afin qu'un refus ne soit pas perdu, puis votre accord
+                vous est redemandé ; il peut être modifié à tout moment ci-dessous.
             </p>
 
             <h3>Mesure d'audience</h3>

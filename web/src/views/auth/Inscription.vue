@@ -24,7 +24,6 @@ const firstname = ref('')
 const lastname = ref('')
 const email = ref('')
 const password = ref('')
-const dob = ref('')
 const photoFile = ref(null)
 const photoPreview = ref(null)
 const errorMessage = ref('')
@@ -92,7 +91,6 @@ const register = async (e) => {
         lastname: lastname.value,
         email: email.value,
         plainPassword: password.value,
-        dob: dob.value,
       },
       { headers: { 'Content-Type': 'application/ld+json' } }
     )
@@ -200,10 +198,6 @@ onMounted(() => {
           <p id="password-help" class="mt-1 text-xs text-[var(--color-ink-soft)]">Au moins {{ PASSWORD_MIN_LENGTH }} caractères ; une phrase de passe est idéale. Les mots de passe présents dans des fuites connues sont refusés.</p>
         </div>
 
-        <div>
-          <label for="dob" class="text-[var(--color-ink-soft)] text-sm tracking-wider uppercase">Date de naissance</label>
-          <input v-model="dob" id="dob" name="dob" type="date" required class="mt-2 appearance-none rounded-md relative block w-full px-4 py-3 border border-[var(--color-rule)] bg-[var(--color-paper)] placeholder-gray-500 text-[var(--color-ink)] focus:outline-none focus:ring-[var(--color-night)] focus:border-[var(--color-ink)] sm:text-sm">
-        </div>
 
         <div v-if="successMessage" class="text-[var(--color-success)] text-sm text-center bg-[var(--color-success)]/10 p-3 rounded-md border border-[var(--color-success)]/30">{{ successMessage }}</div>
         <div v-if="errorMessage" class="error-message text-[var(--color-danger)] text-sm text-center bg-[var(--color-danger)]/10 p-3 rounded-md border border-[var(--color-danger)]/30">{{ errorMessage }}</div>
