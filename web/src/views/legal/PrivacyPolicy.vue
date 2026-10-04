@@ -121,8 +121,16 @@ const label = {
             <h2>Destinataires</h2>
             <p>
                 Les données sont traitées par l'éditeur du site et hébergées chez OVH
-                SAS (France, Union européenne). Aucune donnée n'est cédée, louée ou
-                transférée hors de l'Union européenne.
+                SAS (France, Union européenne). Aucune donnée n'est cédée ni louée.
+            </p>
+            <p>
+                Vérification des mots de passe : lors de la création d'un mot de passe,
+                le serveur interroge le service tiers « Pwned Passwords »
+                (api.pwnedpasswords.com) pour vérifier que ce mot de passe ne figure pas
+                dans une fuite de données connue. Seuls les 5 premiers caractères de
+                l'empreinte SHA-1 du mot de passe sont transmis (méthode dite de
+                k-anonymat) ; ni le mot de passe, ni votre e-mail ne sont envoyés. Le
+                serveur de ce site est en revanche vu comme émetteur de la requête.
             </p>
         </section>
 
