@@ -167,6 +167,8 @@ onMounted(() => {
           </div>
           <textarea
             v-model="editComment"
+            maxlength="2000"
+            aria-label="Modifier le commentaire"
             class="w-full p-3 rounded bg-[var(--color-paper-raised)] border border-[var(--color-rule)] text-[var(--color-ink)] focus:border-[var(--color-ink)] outline-none text-sm"
             rows="3"
           ></textarea>

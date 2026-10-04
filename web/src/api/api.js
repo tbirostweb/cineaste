@@ -1,10 +1,17 @@
 import axios from 'axios';
 import { bus } from '../bus';
 import router from '../router';
+import { clearSession } from '../auth/session';
+
+// Le JWT voyage dans un cookie HttpOnly posé par l'API : `withCredentials`
+// le fait joindre par le navigateur. `X-Requested-With` est exigé par l'API
+// sur les requêtes non sûres authentifiées par cookie (protection CSRF).
+export const CSRF_HEADERS = { 'X-Requested-With': 'XMLHttpRequest' };
 
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL,
     withCredentials: true,
+    headers: { ...CSRF_HEADERS },
 });
 
 let isRateLimited = false;
@@ -16,11 +23,6 @@ const processQueue = () => {
 };
 
 api.interceptors.request.use(config => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-
     if (isRateLimited) {
         return new Promise(resolve => {
             retryQueue.push({ resolve: () => resolve(config) });
@@ -62,11 +64,8 @@ api.interceptors.response.use(
             handleRateLimitHeaders(error.response.headers);
             switch (error.response.status) {
                 case 401:
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('loggedIn');
-                    localStorage.removeItem('userPhoto');
-                    localStorage.removeItem('role');
-                    delete api.defaults.headers.common['Authorization'];
+                    // L'API a déjà effacé le cookie invalide dans sa réponse.
+                    clearSession();
                     router.push('/connexion');
                     bus.emit('error', 'Votre session a expiré. Veuillez vous reconnecter.');
                     break;
@@ -85,5 +84,21 @@ api.interceptors.response.use(
         return Promise.reject(error);
     }
 );
+
+/** Déconnexion : bloque le jeton côté API et efface le cookie, puis l'état local. */
+export async function logout() {
+    try {
+        // Instance nue (sans intercepteurs) : un 401 sur un jeton déjà révoqué
+        // ne doit pas rediriger ; la réponse de l'API efface le cookie.
+        await axios.post(`${import.meta.env.VITE_API_URL}/logout`, null, {
+            withCredentials: true,
+            headers: { ...CSRF_HEADERS },
+        });
+    } catch {
+        // Hors ligne ou session déjà expirée : l'état local est nettoyé quand même.
+    } finally {
+        clearSession();
+    }
+}
 
 export default api;

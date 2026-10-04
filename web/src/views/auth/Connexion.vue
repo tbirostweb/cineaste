@@ -2,7 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
-import api from '/src/api/api.js'
+import api, { CSRF_HEADERS } from '/src/api/api.js'
+import { saveSession } from '/src/auth/session.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -14,12 +15,14 @@ const authCode = ref('')
 const errorMessage = ref('')
 const loading = ref(false)
 const twoFactorRequired = ref(false)
+// Jeton intermédiaire de 2FA : gardé en mémoire uniquement (jamais dans le
+// stockage du navigateur), valable 5 minutes et sur la seule route de vérification.
 const twoFactorToken = ref(null)
 
-const handleLoginSuccess = async (token) => {
-  localStorage.setItem('token', token)
-  localStorage.setItem('loggedIn', 'true')
-  api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+const handleLoginSuccess = async (session) => {
+  // Le JWT est dans un cookie HttpOnly : seul le résumé (rôles, expiration) est conservé.
+  saveSession(session)
+  twoFactorToken.value = null
 
   const userRes = await api.get(import.meta.env.VITE_API_URL_USER)
   const user = userRes.data
@@ -28,12 +31,6 @@ const handleLoginSuccess = async (token) => {
   const photo = user.photo ? `${baseUrl}${user.photo}` : '/placeholder-avatar.svg'
 
   localStorage.setItem('userPhoto', photo)
-  if (user.roles && user.roles.length > 0) {
-    const isAdmin = user.roles.includes('ROLE_ADMIN')
-    localStorage.setItem('role', isAdmin ? 'admin' : 'user')
-  } else {
-    localStorage.setItem('role', 'user')
-  }
 
   emit('login-success', photo)
 
@@ -57,7 +54,8 @@ const login = async (e) => {
       email: email.value,
       password: password.value
     }, {
-      withCredentials: true
+      withCredentials: true,
+      headers: { ...CSRF_HEADERS }
     })
 
     // Si le 2FA est activé, on reçoit un token temporaire
@@ -65,8 +63,8 @@ const login = async (e) => {
       twoFactorToken.value = response.data.token
       twoFactorRequired.value = true
     } else {
-      // Sinon, on est connecté directement
-      await handleLoginSuccess(response.data.token)
+      // Sinon, on est connecté directement (cookie de session posé par l'API)
+      await handleLoginSuccess(response.data.session)
     }
   } catch (err) {
     errorMessage.value = "Email ou mot de passe incorrect."
@@ -88,11 +86,13 @@ const verifyTwoFactor = async (e) => {
       headers: { 'Authorization': `Bearer ${twoFactorToken.value}` }
     })
 
-    if (response.data.token) {
-      await handleLoginSuccess(response.data.token)
+    if (response.data.session) {
+      await handleLoginSuccess(response.data.session)
     }
   } catch (err) {
-    errorMessage.value = err.response?.data?.error || "Code invalide ou expiré."
+    errorMessage.value = err.response?.status === 429
+      ? "Trop de tentatives. Réessayez dans quelques minutes."
+      : "Code invalide ou expiré."
   } finally {
     loading.value = false
   }

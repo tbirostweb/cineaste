@@ -1,52 +1,82 @@
-import { jwtDecode } from 'jwt-decode'
-
-const KEYS = ['token', 'loggedIn', 'role', 'userPhoto']
-
 /**
- * État de session dérivé du JWT lui-même plutôt que d'un drapeau
- * `localStorage.loggedIn`. Le jeton porte son expiration et ses rôles :
- * on évite ainsi d'afficher une interface "connecté" avec un jeton périmé,
- * et de proposer l'onglet Admin à qui a simplement écrit `role=admin`.
+ * État de session côté navigateur.
  *
- * À garder en tête : c'est du confort d'affichage. L'autorisation réelle est
- * rendue par l'API à chaque requête — jamais par ce fichier.
+ * Le JWT n'est plus accessible au JavaScript : l'API le pose dans un cookie
+ * HttpOnly, Secure, SameSite que le navigateur joint seul aux appels
+ * (`withCredentials`). Un script injecté ne peut donc plus l'exfiltrer.
+ *
+ * Ce module ne conserve qu'un résumé NON sensible renvoyé par l'API à la
+ * connexion (`session` : rôles, expiration) pour piloter l'affichage. C'est du
+ * confort : l'autorisation réelle est rendue par l'API à chaque requête.
  */
-export function readSession() {
-    const token = localStorage.getItem('token')
-    if (!token) return { valid: false, isAdmin: false, roles: [], email: null, token: null }
 
+export const SESSION_KEY = 'session'
+
+// Clés héritées de l'ancien stockage du jeton : purgées à chaque nettoyage.
+const LEGACY_KEYS = ['token', 'loggedIn', 'role']
+const KEYS = [SESSION_KEY, 'userPhoto', ...LEGACY_KEYS]
+
+const EMPTY = Object.freeze({ valid: false, isAdmin: false, roles: [], expiresAt: null })
+
+function storage() {
     try {
-        const payload = jwtDecode(token)
-
-        // Jeton intermédiaire de la 2FA : il ne vaut pas une session ouverte
-        if (payload['2fa_pending'] === true) {
-            return { valid: false, isAdmin: false, roles: [], email: null, token: null }
-        }
-
-        const expired = typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()
-        if (expired) {
-            return { valid: false, isAdmin: false, roles: [], email: null, token: null }
-        }
-
-        const roles = Array.isArray(payload.roles) ? payload.roles : []
-
-        return {
-            valid: true,
-            isAdmin: roles.includes('ROLE_ADMIN'),
-            roles,
-            email: payload.username ?? payload.email ?? null,
-            token,
-            expiresAt: payload.exp ? payload.exp * 1000 : null,
-        }
+        return typeof localStorage === 'undefined' ? null : localStorage
     } catch {
-        // Jeton illisible (tronqué, altéré) : traité comme absent
-        return { valid: false, isAdmin: false, roles: [], email: null, token: null }
+        return null
     }
 }
 
-/** Efface toute trace de session côté navigateur. */
+/** Enregistre le résumé de session renvoyé par l'API (`response.data.session`). */
+export function saveSession(summary) {
+    const store = storage()
+    if (!store || !summary || typeof summary !== 'object') return
+
+    const roles = Array.isArray(summary.roles) ? summary.roles.filter((r) => typeof r === 'string') : []
+    const expiresAt = Number(summary.expiresAt)
+    if (!Number.isFinite(expiresAt)) return
+
+    // Ancien jeton éventuellement resté d'une version précédente du front.
+    LEGACY_KEYS.forEach((key) => store.removeItem(key))
+    store.setItem(SESSION_KEY, JSON.stringify({ roles, expiresAt }))
+}
+
+export function readSession() {
+    const store = storage()
+    if (!store) return { ...EMPTY }
+
+    try {
+        const raw = store.getItem(SESSION_KEY)
+        if (!raw) return { ...EMPTY }
+
+        const { roles, expiresAt } = JSON.parse(raw)
+        // expiresAt est exprimé en secondes (horodatage Unix de l'API).
+        if (typeof expiresAt !== 'number' || expiresAt * 1000 <= Date.now()) {
+            return { ...EMPTY }
+        }
+
+        const safeRoles = Array.isArray(roles) ? roles : []
+
+        return {
+            valid: true,
+            isAdmin: safeRoles.includes('ROLE_ADMIN'),
+            roles: safeRoles,
+            expiresAt: expiresAt * 1000,
+        }
+    } catch {
+        // Résumé illisible (altéré) : traité comme absent
+        return { ...EMPTY }
+    }
+}
+
+/**
+ * Efface toute trace de session côté navigateur. Ne touche pas au choix de
+ * mesure d'audience (clé de consentement) : un refus ne doit pas être perdu à
+ * la déconnexion.
+ */
 export function clearSession() {
-    KEYS.forEach((key) => localStorage.removeItem(key))
+    const store = storage()
+    if (!store) return
+    KEYS.forEach((key) => store.removeItem(key))
 }
 
 /** Millisecondes restantes avant expiration (0 si pas de session valide). */

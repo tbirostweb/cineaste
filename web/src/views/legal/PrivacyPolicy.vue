@@ -84,11 +84,20 @@ const label = {
             <h2>Cookies et stockage local</h2>
             <h3>Strictement nécessaires</h3>
             <p>
-                Le site conserve dans le stockage local de votre navigateur votre jeton
-                de session, votre avatar en cache et votre choix en matière de mesure
-                d'audience. Ces éléments sont indispensables au fonctionnement du
-                service et ne requièrent pas de consentement. Ils sont effacés à la
-                déconnexion.
+                Votre session de connexion est portée par un cookie technique
+                (<code>BEARER</code>), déposé par l'API, inaccessible aux scripts de la
+                page (HttpOnly), transmis uniquement en HTTPS et limité au site. Il
+                expire au bout d'une heure et est supprimé à la déconnexion.
+            </p>
+            <p>
+                Le stockage local de votre navigateur conserve un résumé de session
+                (rôles et heure d'expiration, sans jeton), votre avatar en cache et
+                votre choix en matière de mesure d'audience. Ces éléments sont
+                indispensables au fonctionnement du service et ne requièrent pas de
+                consentement. Le résumé de session et l'avatar sont effacés à la
+                déconnexion ; votre choix de mesure d'audience est conservé, afin
+                qu'un refus ne soit pas perdu, et peut être modifié à tout moment
+                ci-dessous.
             </p>
 
             <h3>Mesure d'audience</h3>

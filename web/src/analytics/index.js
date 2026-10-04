@@ -11,10 +11,13 @@
  */
 let loaded = false
 
-export function loadAnalytics() {
+// Variables figées par Vite au build ; `?? {}` permet l'exécution hors Vite (tests).
+const BUILD_ENV = import.meta.env ?? {}
+
+export function loadAnalytics(env = BUILD_ENV) {
     if (loaded) return
-    const src = import.meta.env.VITE_ANALYTICS_SRC
-    const domain = import.meta.env.VITE_ANALYTICS_DOMAIN
+    const src = env.VITE_ANALYTICS_SRC
+    const domain = env.VITE_ANALYTICS_DOMAIN
     if (!src || !domain) return
 
     loaded = true
@@ -25,14 +28,20 @@ export function loadAnalytics() {
     document.head.appendChild(script)
 }
 
-/** Retire le script au retrait du consentement (effectif au rechargement). */
-export function unloadAnalytics() {
-    const src = import.meta.env.VITE_ANALYTICS_SRC
+/**
+ * Retrait du consentement : retirer la balise ne suffit pas, le script déjà
+ * exécuté continuerait de mesurer. Si la mesure était active, la page est
+ * rechargée — elle repart alors sans aucun script de mesure.
+ */
+export function unloadAnalytics(reload = () => window.location.reload(), env = BUILD_ENV) {
+    const src = env.VITE_ANALYTICS_SRC
     if (!src) return
+    const wasLoaded = loaded
     document.head.querySelector(`script[src="${src}"]`)?.remove()
     loaded = false
+    if (wasLoaded) reload()
 }
 
-export function isAnalyticsConfigured() {
-    return Boolean(import.meta.env.VITE_ANALYTICS_SRC && import.meta.env.VITE_ANALYTICS_DOMAIN)
+export function isAnalyticsConfigured(env = BUILD_ENV) {
+    return Boolean(env.VITE_ANALYTICS_SRC && env.VITE_ANALYTICS_DOMAIN)
 }

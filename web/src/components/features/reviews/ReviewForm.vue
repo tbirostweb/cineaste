@@ -12,8 +12,8 @@
     <form v-else @submit.prevent="submitReview" class="space-y-6">
       <!-- Rating -->
       <div>
-        <label class="block text-[var(--color-ink-faint)] text-xs uppercase tracking-wider font-bold mb-3">Note</label>
-        <div class="flex gap-2">
+        <p id="rating-label" class="block text-[var(--color-ink-faint)] text-xs uppercase tracking-wider font-bold mb-3">Note</p>
+        <div class="flex gap-2" role="group" aria-labelledby="rating-label" :aria-describedby="errors.rating ? 'rating-error' : undefined">
           <button
             v-for="n in 5"
             :key="n"
@@ -23,12 +23,13 @@
             @mouseleave="hoverRating = 0"
             class="text-3xl focus:outline-none transition-transform hover:scale-110"
             :class="(hoverRating || rating) >= n ? 'text-[var(--color-night)]' : 'text-[var(--color-rule)]'"
-            :aria-label="n + ' étoiles'"
+            :aria-label="n + (n > 1 ? ' étoiles sur 5' : ' étoile sur 5')"
+            :aria-pressed="rating === n"
           >
-            ★
+            <span aria-hidden="true">★</span>
           </button>
         </div>
-        <p v-if="errors.rating" class="text-[var(--color-danger)] text-xs mt-2">{{ errors.rating }}</p>
+        <p v-if="errors.rating" id="rating-error" role="alert" class="text-[var(--color-danger)] text-xs mt-2">{{ errors.rating }}</p>
       </div>
 
       <!-- Comment -->
@@ -39,13 +40,18 @@
           v-model="comment"
           class="w-full p-4 rounded-lg bg-[var(--color-paper)] border border-[var(--color-rule)] text-[var(--color-ink)] focus:border-[var(--color-ink)] focus:ring-1 focus:ring-[var(--color-night)] outline-none transition-all resize-none"
           rows="4"
+          :maxlength="COMMENT_MAX_LENGTH"
+          :aria-invalid="errors.comment ? 'true' : 'false'"
+          aria-describedby="comment-count"
+          :aria-errormessage="errors.comment ? 'comment-error' : undefined"
           placeholder="Partagez votre avis sur ce film..."
         ></textarea>
-        <p v-if="errors.comment" class="text-[var(--color-danger)] text-xs mt-2">{{ errors.comment }}</p>
+        <p id="comment-count" class="text-[var(--color-ink-faint)] text-xs mt-1">{{ comment.length }} / {{ COMMENT_MAX_LENGTH }} caractères</p>
+        <p v-if="errors.comment" id="comment-error" role="alert" class="text-[var(--color-danger)] text-xs mt-2">{{ errors.comment }}</p>
       </div>
 
       <!-- Global Error -->
-      <div v-if="submitError" class="p-3 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/30 rounded text-[var(--color-danger)] text-sm text-center">
+      <div v-if="submitError" role="alert" class="p-3 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/30 rounded text-[var(--color-danger)] text-sm text-center">
         {{ submitError }}
       </div>
 
@@ -65,6 +71,10 @@
 <script setup>
 import { ref, computed } from 'vue';
 import api from '/src/api/api.js';
+import { readSession } from '/src/auth/session.js';
+
+// Aligné sur Review::COMMENT_MAX_LENGTH côté API (contrôle serveur décisif).
+const COMMENT_MAX_LENGTH = 2000;
 import { useDataStore } from '../../../stores/useDataStore';
 import { logger } from '../../../utils/logger'
 
@@ -85,7 +95,7 @@ const isSubmitting = ref(false);
 const submitError = ref('');
 const errors = ref({});
 
-const isLoggedIn = computed(() => localStorage.getItem('loggedIn') === 'true');
+const isLoggedIn = computed(() => readSession().valid);
 
 const validate = () => {
   errors.value = {};
@@ -101,6 +111,9 @@ const validate = () => {
     isValid = false;
   } else if (comment.value.length < 10) {
     errors.value.comment = "Le commentaire doit faire au moins 10 caractères.";
+    isValid = false;
+  } else if (comment.value.length > COMMENT_MAX_LENGTH) {
+    errors.value.comment = `Le commentaire ne doit pas dépasser ${COMMENT_MAX_LENGTH} caractères.`;
     isValid = false;
   }
 

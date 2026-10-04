@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from "vue"
 import { useRouter } from 'vue-router'
 import { useDataStore } from '../../stores/useDataStore'
-import api from "/src/api/api.js"
+import api, { logout } from "/src/api/api.js"
 import ConfirmDeleteUser from "../../components/admin/modals/ConfirmDeleteUser.vue"
 import UserForm from '../../components/admin/forms/UserForm.vue'
 import TwoFactorSetup from '../../components/features/auth/TwoFactorSetup.vue'
@@ -63,9 +63,8 @@ const deleteUser = async () => {
     await api.delete(`/users/${userToDelete.value.id}`)
     showConfirm.value = false
     userToDelete.value = null
-    localStorage.removeItem('token')
-    localStorage.removeItem('role')
-    localStorage.removeItem('userPhoto')
+    // Compte supprimé : efface le cookie de session et l'état local
+    await logout()
     router.push('/inscription')
   } catch (err) {
     logger.error('Erreur suppression', err)
@@ -97,7 +96,6 @@ async function fetchUser() {
   try {
     await dataStore.fetchUser()
     if (user.value) {
-      localStorage.setItem("role", userRole.value === "ROLE_ADMIN" ? "admin" : "user")
       localStorage.setItem("userPhoto", photo.value)
     }
   } catch (err) {

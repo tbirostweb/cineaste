@@ -2,14 +2,21 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import { CSRF_HEADERS, logout } from '/src/api/api.js'
 
 const router = useRouter()
+
+// Politique serveur : 12 caractères minimum (et refus des mots de passe connus
+// dans des fuites). Le contrôle ici n'est qu'un confort de saisie.
+const PASSWORD_MIN_LENGTH = 12
+const MAX_PHOTO_BYTES = 4 * 1024 * 1024
 
 const apiPublic = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   withCredentials: true,
   headers: {
-    'Accept': 'application/ld+json'
+    'Accept': 'application/ld+json',
+    ...CSRF_HEADERS,
   }
 })
 
@@ -31,8 +38,8 @@ const handleFileChange = (e) => {
       alert('Veuillez sélectionner un fichier image.')
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      alert('La taille de l\'image ne doit pas dépasser 5 Mo.')
+    if (file.size > MAX_PHOTO_BYTES) {
+      alert('La taille de l\'image ne doit pas dépasser 4 Mo.')
       return
     }
     photoFile.value = file
@@ -57,14 +64,12 @@ const removePhoto = () => {
  * d'exiger un compte côté API, et un avatar qui échoue ne fait plus perdre
  * l'inscription elle-même.
  */
-const uploadPhoto = async (file, token) => {
+const uploadPhoto = async (file) => {
   const formData = new FormData()
   formData.append('file', file)
+  // Authentifié par le cookie de session posé lors de la connexion.
   const response = await apiPublic.post('/media_objects', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { 'Content-Type': 'multipart/form-data' },
   })
   return response.data['@id'] || `/api/media_objects/${response.data.id}`
 }
@@ -73,6 +78,10 @@ const register = async (e) => {
   e.preventDefault()
   errorMessage.value = ''
   successMessage.value = ''
+  if (password.value.length < PASSWORD_MIN_LENGTH) {
+    errorMessage.value = `Le mot de passe doit contenir au moins ${PASSWORD_MIN_LENGTH} caractères.`
+    return
+  }
   isLoading.value = true
 
   try {
@@ -90,22 +99,21 @@ const register = async (e) => {
 
     if (photoFile.value) {
       try {
-        const { data: auth } = await apiPublic.post(
+        await apiPublic.post(
           import.meta.env.VITE_API_URL_AUTH,
           { email: email.value, password: password.value }
         )
-        const photoIri = await uploadPhoto(photoFile.value, auth.token)
+        const photoIri = await uploadPhoto(photoFile.value)
         await apiPublic.patch(
           `/users/${created.id}`,
           { photo: photoIri },
-          {
-            headers: {
-              'Content-Type': 'application/merge-patch+json',
-              Authorization: `Bearer ${auth.token}`,
-            },
-          }
+          { headers: { 'Content-Type': 'application/merge-patch+json' } }
         )
+        // Session ouverte uniquement pour l'envoi de l'avatar : refermée
+        // avant la redirection vers l'écran de connexion.
+        await logout()
       } catch {
+        await logout()
         // Le compte existe : on n'annule pas l'inscription pour un avatar.
         // Il pourra être ajouté depuis le profil.
         successMessage.value =
@@ -118,7 +126,11 @@ const register = async (e) => {
     }
     setTimeout(() => router.push('/connexion'), 2000)
   } catch (error) {
+    const violations = error.response?.data?.violations
     errorMessage.value =
+        (Array.isArray(violations) && violations.length
+            ? violations.map((v) => v.message).join(' ')
+            : null) ||
         error.response?.data?.message ||
         error.response?.data?.['hydra:description'] ||
         error.response?.data?.detail ||
@@ -184,7 +196,8 @@ onMounted(() => {
 
         <div>
           <label for="password" class="text-[var(--color-ink-soft)] text-sm tracking-wider uppercase">Mot de passe</label>
-          <input v-model="password" id="password" name="password" type="password" autocomplete="new-password" required class="mt-2 appearance-none rounded-md relative block w-full px-4 py-3 border border-[var(--color-rule)] bg-[var(--color-paper)] placeholder-gray-500 text-[var(--color-ink)] focus:outline-none focus:ring-[var(--color-night)] focus:border-[var(--color-ink)] sm:text-sm transition-all" placeholder="********">
+          <input v-model="password" id="password" name="password" type="password" autocomplete="new-password" required :minlength="PASSWORD_MIN_LENGTH" maxlength="4096" aria-describedby="password-help" class="mt-2 appearance-none rounded-md relative block w-full px-4 py-3 border border-[var(--color-rule)] bg-[var(--color-paper)] placeholder-gray-500 text-[var(--color-ink)] focus:outline-none focus:ring-[var(--color-night)] focus:border-[var(--color-ink)] sm:text-sm transition-all" placeholder="********">
+          <p id="password-help" class="mt-1 text-xs text-[var(--color-ink-soft)]">Au moins {{ PASSWORD_MIN_LENGTH }} caractères ; une phrase de passe est idéale. Les mots de passe présents dans des fuites connues sont refusés.</p>
         </div>
 
         <div>

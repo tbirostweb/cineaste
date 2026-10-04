@@ -34,6 +34,16 @@ FROM nginx:1.27-alpine AS runtime
 RUN rm /etc/nginx/conf.d/default.conf && mkdir -p /etc/nginx/snippets
 COPY nginx.conf /etc/nginx/conf.d/app.conf
 COPY nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
+
+# CSP alignée sur le bundle : origine de l'API (connect-src) et, si configurée,
+# origine HTTPS de la mesure d'audience (script-src + connect-src).
+ARG VITE_API_URL
+ARG VITE_ANALYTICS_SRC
+RUN api_origin="$(printf '%s' "${VITE_API_URL:-https://wr506.theo-birost.fr}" | sed -E 's#^(https?://[^/]+).*#\1#')" \
+    && analytics_origin="$(printf '%s' "${VITE_ANALYTICS_SRC}" | sed -nE 's#^(https://[^/]+).*#\1#p')" \
+    && sed -i -e "s#__API_ORIGIN__#${api_origin}#g" -e "s#__ANALYTICS_ORIGIN__#${analytics_origin}#g" \
+        /etc/nginx/snippets/security-headers.conf \
+    && ! grep -q '__[A-Z_]*_ORIGIN__' /etc/nginx/snippets/security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 # Échoue le build plutôt que de livrer une image dont nginx refuse de démarrer

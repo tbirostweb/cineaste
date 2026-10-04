@@ -7,7 +7,7 @@ import ErrorDisplay from './components/common/ErrorDisplay.vue'
 import CookieBanner from './components/common/CookieBanner.vue'
 import { readSession, clearSession } from './auth/session'
 import { useMotionPreference } from './composables/useMotion'
-import api from './api/api.js'
+import api, { logout } from './api/api.js'
 
 const FALLBACK_AVATAR = '/placeholder-avatar.svg'
 
@@ -53,10 +53,11 @@ const handleLogin = (newPhoto) => {
     photo.value = newPhoto || FALLBACK_AVATAR
 }
 
-const handleLogout = () => {
+const handleLogout = async () => {
     loggedIn.value = false
-    clearSession()
     photo.value = FALLBACK_AVATAR
+    // Bloque le jeton côté API et efface le cookie HttpOnly, puis l'état local
+    await logout()
 }
 </script>
 

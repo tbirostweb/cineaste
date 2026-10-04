@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '/src/api/api.js'
+import { saveSession } from '/src/auth/session.js'
 import { logger } from '../../../utils/logger'
 
 const emit = defineEmits(['close', 'enabled'])
@@ -28,7 +29,7 @@ const setupTwoFactor = async () => {
     logger.error('Erreur setupTwoFactor', err)
     if (err.response) {
         logger.error('Détails erreur réponse', err.response.data)
-        error.value = err.response.data.error || 'Erreur lors de la configuration'
+        error.value = err.response.data.message || err.response.data.error || 'Erreur lors de la configuration'
         if (err.response.data.exception_message) {
             logger.error('Exception serveur', err.response.data.exception_message)
         }
@@ -55,11 +56,16 @@ const verifyAndEnable = async () => {
     })
 
     backupCodes.value = response.data.backup_codes
+    // L'activation révoque les sessions antérieures et en ouvre une nouvelle
+    // (nouveau cookie) : on met à jour le résumé local.
+    saveSession(response.data.session)
     step.value = 3
 
     await new Promise(resolve => setTimeout(resolve, 100))
   } catch (err) {
-    error.value = err.response?.data?.error || 'Code invalide'
+    error.value = err.response?.status === 429
+      ? 'Trop de tentatives. Réessayez dans quelques minutes.'
+      : (err.response?.data?.error || 'Code invalide')
   } finally {
     loading.value = false
   }
