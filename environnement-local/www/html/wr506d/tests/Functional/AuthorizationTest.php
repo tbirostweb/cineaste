@@ -118,10 +118,14 @@ final class AuthorizationTest extends FunctionalTestCase
         $this->createUser('a@example.test');
         $this->createUser('admin@example.test', ['ROLE_ADMIN']);
 
-        // Anonyme, en GET (règle pare-feu « GET public »).
+        // Anonyme, en GET : aucune opération GraphQL n'est exécutée en GET.
         $this->client->request('GET', '/api/graphql', ['query' => '{ users { edges { node { email } } } }']);
-        $anonymous = json_decode($this->client->getResponse()->getContent(), true);
-        self::assertNotEmpty($anonymous['errors'] ?? [], 'La liste des comptes ne doit pas être publique en GraphQL.');
+        self::assertSame(405, $this->httpStatus());
+        self::assertStringNotContainsString('a@example.test', $this->client->getResponse()->getContent());
+
+        // Anonyme, en POST : refusé (pare-feu ou expression de sécurité).
+        $anonymous = $this->request('POST', '/api/graphql', ['query' => '{ users { edges { node { email } } } }'], 'application/json');
+        self::assertTrue(401 === $this->httpStatus() || [] !== ($anonymous['errors'] ?? []), 'La liste des comptes ne doit pas être publique en GraphQL.');
         self::assertStringNotContainsString('a@example.test', $this->client->getResponse()->getContent());
 
         // Utilisateur simple.

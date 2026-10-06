@@ -71,6 +71,14 @@ Projet réalisé dans le cadre du module WR506D.
 - Requêtes non sûres authentifiées par cookie : en-tête `X-Requested-With: XMLHttpRequest` obligatoire (anti-CSRF).
 - Clients non navigateur : en-tête `Authorization: Bearer <jwt>` toujours accepté.
 - `POST /api/users` : Créer un compte utilisateur (mot de passe ≥ 12 caractères, absent des fuites connues)
+- Changer son propre mot de passe (`PATCH /api/users/{id}` avec `plainPassword`)
+  exige `currentPassword`, et `twoFactorCode` si la 2FA est active ; de même pour
+  changer son e-mail (compte non administrateur). Le changement de mot de passe
+  et l'activation de la 2FA révoquent la clé API.
+- Débit : anonyme 5 requêtes non sûres / min par IP (les GET publics ne sont pas
+  comptés) ; authentifié 100 requêtes / min par compte (plafond `limiter` du
+  compte) ; inscription 10 / h par IP ; envois de fichiers 20 / h et 40 Mio / h
+  par compte (administrateurs exemptés).
 - 2FA : `POST /api/2fa/setup` (secret en attente ; code actuel exigé si déjà active), `POST /api/2fa/enable` (bascule après code valide), `POST /api/2fa/disable`, `GET /api/2fa/status`. Quota : 5 échecs / 5 min par compte.
 
 ### Ressources (REST)
@@ -80,7 +88,9 @@ Projet réalisé dans le cadre du module WR506D.
 - `GET /api/categories` : Liste des catégories
 
 ### GraphQL
-- Endpoint : `/api/graphql`
+- Endpoint : `/api/graphql`, opérations en **POST uniquement** (un GET portant
+  `?query=` répond 405 : protection contre les mutations déclenchées par lien).
+- Avec le cookie de session, l'en-tête `X-Requested-With: XMLHttpRequest` est exigé.
 - Interface GraphiQL disponible en mode dev
 
 ## Tests et Qualité
@@ -105,6 +115,26 @@ L'application est déployée et accessible à l'adresse : [https://cineaste.theo
 
 Variables d'environnement : voir `.env.example` (noms seulement ; valeurs dans
 l'onglet Environment de Dokploy, jamais dans le dépôt ni l'image).
+
+L'image Docker n'embarque pas `.env` (exclu par `.dockerignore`) : le runtime
+Symfony charge à la place `.env.dist`, versionné et vide de toute valeur. Toutes
+les variables (dont `APP_SECRET`, `DATABASE_URL`, `JWT_SECRET_KEY`,
+`JWT_PUBLIC_KEY`, `JWT_PASSPHRASE`, `MAILER_DSN`) doivent donc être définies dans
+Dokploy.
+
+### Proxy de confiance (`TRUSTED_PROXIES`)
+L'API est servie derrière Traefik (Dokploy). `TRUSTED_PROXIES` doit contenir
+l'adresse ou le **CIDR du réseau Docker par lequel Traefik joint le conteneur**
+(par exemple le sous-réseau du réseau overlay `dokploy-network`, relevé avec
+`docker network inspect`), et rien de plus large. Sans cette valeur, toutes les
+requêtes semblent venir du proxy : quotas anonymes, limite d'inscription et
+limitation des connexions sont alors partagés par tous les visiteurs. Trop
+large (`0.0.0.0/0`), n'importe quel client peut usurper une IP via
+`X-Forwarded-For`. Valeur par défaut : `127.0.0.1`.
+
+### Documentation de l'API
+`/api/docs` (OpenAPI, Swagger UI) n'est servie qu'en dev et en test ; elle est
+désactivée en production (`enable_docs: false`).
 
 ### Migrations : sauvegarde obligatoire
 Le conteneur applique les migrations au démarrage et **s'arrête si l'une

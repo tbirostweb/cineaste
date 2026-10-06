@@ -26,6 +26,14 @@ class ApiKey
     #[ORM\Column(nullable: true)]
     private ?DateTimeImmutable $lastUsedAt = null;
 
+    /**
+     * Version de session du compte à la génération (User::$tokenVersion) :
+     * la clé est refusée dès que cette version change. Null pour les clés
+     * générées avant l'introduction du champ.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?int $tokenVersion = null;
+
     public function getHash(): ?string
     {
         return $this->hash;
@@ -78,6 +86,29 @@ class ApiKey
     public function setLastUsedAt(?DateTimeImmutable $lastUsedAt): self
     {
         $this->lastUsedAt = $lastUsedAt;
+        return $this;
+    }
+
+    public function getTokenVersion(): ?int
+    {
+        return $this->tokenVersion;
+    }
+
+    public function setTokenVersion(?int $tokenVersion): self
+    {
+        $this->tokenVersion = $tokenVersion;
+        return $this;
+    }
+
+    /** Supprime la clé : elle ne peut plus authentifier. */
+    public function revoke(): self
+    {
+        $this->hash = null;
+        $this->prefix = null;
+        $this->enabled = false;
+        $this->createdAt = null;
+        $this->lastUsedAt = null;
+        $this->tokenVersion = null;
         return $this;
     }
 

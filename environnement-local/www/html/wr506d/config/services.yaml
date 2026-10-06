@@ -37,6 +37,18 @@ services:
         arguments:
             $anonymousApiLimiter: '@limiter.anonymous_api'
             $authenticatedApiLimiter: '@limiter.authenticated_api'
+            $registrationLimiter: '@limiter.registration'
+            $rateLimiterStorage: '@app.rate_limiter_storage'
+
+    # Stockage commun des limiteurs créés à la volée (plafond propre au compte).
+    app.rate_limiter_storage:
+        class: Symfony\Component\RateLimiter\Storage\CacheStorage
+        arguments: ['@cache.rate_limiter']
+
+    App\EventSubscriber\UploadQuotaSubscriber:
+        arguments:
+            $uploadCountLimiter: '@limiter.media_upload_count'
+            $uploadVolumeLimiter: '@limiter.media_upload_volume'
 
     App\Security\AuthCookieManager:
         arguments:

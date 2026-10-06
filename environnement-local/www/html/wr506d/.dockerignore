@@ -5,6 +5,10 @@
 # Une image Docker n'est pas un coffre : quiconque la tire lit ces fichiers.
 
 # Secrets d'environnement (les valeurs de prod viennent de Dokploy)
+# `.env` porte des valeurs locales : jamais dans l'image. Le runtime Symfony
+# exige un fichier .env : à défaut, il charge `.env.dist` (versionné, sans
+# secret).
+.env
 .env.local
 .env.*.local
 .env.dev

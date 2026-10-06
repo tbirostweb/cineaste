@@ -1,6 +1,8 @@
 framework:
     rate_limiter:
-        # Limiteur pour les utilisateurs non authentifiés (par IP)
+        # Limiteur pour les utilisateurs non authentifiés (par IP). Seules les
+        # requêtes non sûres (POST, PATCH…) sont comptées : les GET du catalogue
+        # public n'y sont pas soumis (ApiRateLimitSubscriber).
         anonymous_api:
             policy: 'fixed_window'
             limit: 5
@@ -19,3 +21,21 @@ framework:
             policy: 'sliding_window'
             limit: 5
             interval: '5 minutes'
+
+        # Inscription (POST /api/users), par IP, en plus du quota anonyme.
+        registration:
+            policy: 'sliding_window'
+            limit: 10
+            interval: '1 hour'
+
+        # Envois de fichiers (POST /api/media_objects), par compte : nombre
+        # d'envois et volume cumulé (en Kio). Les administrateurs, qui
+        # alimentent le catalogue, n'y sont pas soumis.
+        media_upload_count:
+            policy: 'sliding_window'
+            limit: 20
+            interval: '1 hour'
+        media_upload_volume:
+            policy: 'fixed_window'
+            limit: 40960 # 40 Mio
+            interval: '1 hour'

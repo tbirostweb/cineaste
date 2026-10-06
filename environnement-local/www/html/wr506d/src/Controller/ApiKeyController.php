@@ -43,6 +43,8 @@ class ApiKeyController extends AbstractController
         $apiKeyObject->setEnabled(true);
         $apiKeyObject->setCreatedAt(new DateTimeImmutable());
         $apiKeyObject->setLastUsedAt(null);
+        // Refusée dès que la version de session change (mot de passe, 2FA…).
+        $apiKeyObject->setTokenVersion($user->getTokenVersion());
 
         $this->entityManager->flush();
 

@@ -59,7 +59,7 @@ final class AccountTest extends FunctionalTestCase
         $this->login('a@example.test');
         $oldToken = $this->sessionCookie()->getValue();
 
-        $this->request('PATCH', '/api/users/'.$user->getId(), ['plainPassword' => 'Nouvelle-phrase-2026!'], 'application/merge-patch+json');
+        $this->request('PATCH', '/api/users/'.$user->getId(), ['plainPassword' => 'Nouvelle-phrase-2026!', 'currentPassword' => self::PASSWORD], 'application/merge-patch+json');
         self::assertSame(200, $this->httpStatus());
 
         $this->logoutClient();

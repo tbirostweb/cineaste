@@ -4,6 +4,8 @@ namespace App\Controller;
 
 use App\Entity\User;
 use App\Repository\UserRepository;
+use App\Security\Voter\UserVoter;
+use Psr\Log\LoggerInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -26,7 +28,8 @@ class UserController extends AbstractController
         int $id,
         Request $request,
         UserRepository $userRepo,
-        EntityManagerInterface $em
+        EntityManagerInterface $em,
+        LoggerInterface $logger
     ): JsonResponse {
         $user = $userRepo->find($id);
 
@@ -45,8 +48,9 @@ class UserController extends AbstractController
             ], 400);
         }
 
-        // Un super-administrateur ne peut pas être rétrogradé par un simple admin.
-        if (\in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true) && !$this->isGranted('ROLE_SUPER_ADMIN')) {
+        // Un compte de rang supérieur (super-administrateur) ne peut pas être
+        // modifié par un simple admin (UserVoter).
+        if (!$this->isGranted(UserVoter::EDIT, $user)) {
             return new JsonResponse(['error' => 'forbidden', 'message' => 'Action réservée.'], 403);
         }
 
@@ -64,6 +68,13 @@ class UserController extends AbstractController
         $user->setRoles([$newRole]);
         $user->revokeTokens();
         $em->flush();
+
+        $logger->notice('Action administrateur sur un compte', [
+            'action' => 'user_role_update',
+            'admin_id' => $current instanceof User ? $current->getId() : null,
+            'target_id' => $user->getId(),
+            'role' => $newRole,
+        ]);
 
         return new JsonResponse([
             'success' => true,

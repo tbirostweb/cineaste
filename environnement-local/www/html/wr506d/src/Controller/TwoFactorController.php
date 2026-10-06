@@ -6,6 +6,7 @@ use App\Entity\User;
 use App\EventListener\AuthenticationSuccessListener;
 use App\Security\AuthCookieManager;
 use App\Service\TwoFactorService;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Exception\MissingClaimException;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\BlockedTokenManagerInterface;
@@ -49,20 +50,27 @@ class TwoFactorController extends AbstractController
             return $this->json(['error' => 'User not found'], 401);
         }
 
-        if (null !== $limited = $this->consumeQuota($user)) {
-            return $limited;
-        }
-
-        if ($user->isTwoFactorEnabled()) {
-            $code = $this->readCode($request);
-            if ('' === $code || !$this->verifyCurrentFactor($user, $code, consumeBackup: false)) {
-                $this->recordFailure($user);
-
-                return $this->json([
-                    'error' => 'current_code_required',
-                    'message' => 'Saisissez un code valide de votre application actuelle pour la remplacer.',
-                ], 403);
+        $denied = $this->underAccountLock($user, function () use ($user, $request): ?JsonResponse {
+            if (null !== $limited = $this->consumeQuota($user)) {
+                return $limited;
             }
+
+            if ($user->isTwoFactorEnabled()) {
+                $code = $this->readCode($request);
+                if ('' === $code || !$this->verifyCurrentFactor($user, $code, consumeBackup: false)) {
+                    $this->recordFailure($user);
+
+                    return $this->json([
+                        'error' => 'current_code_required',
+                        'message' => 'Saisissez un code valide de votre application actuelle pour la remplacer.',
+                    ], 403);
+                }
+            }
+
+            return null;
+        });
+        if (null !== $denied) {
+            return $denied;
         }
 
         try {
@@ -100,39 +108,48 @@ class TwoFactorController extends AbstractController
             return $this->json(['error' => 'User not found'], 401);
         }
 
-        if (null !== $limited = $this->consumeQuota($user)) {
-            return $limited;
-        }
-
-        $pendingSecret = $user->getTwoFactorPendingSecret();
-        if (!$pendingSecret) {
-            return $this->json(['error' => 'Please call /api/2fa/setup first'], 400);
-        }
-
-        $code = $this->readCode($request);
-        if ('' === $code) {
-            return $this->json(['error' => 'Code is required'], 400);
-        }
-
-        // Le compteur anti-rejeu repart de zéro pour un nouveau secret.
-        $previousTimestep = $user->getTwoFactorAuth()?->getLastUsedTimestep();
-        $user->getTwoFactorAuth()?->setLastUsedTimestep(null);
-        if (!$this->twoFactorService->verifyCode($user, $code, $pendingSecret)) {
-            $user->getTwoFactorAuth()?->setLastUsedTimestep($previousTimestep);
-            $this->recordFailure($user);
-
-            return $this->json(['error' => 'Invalid code'], 400);
-        }
-
         $backupCodes = $this->twoFactorService->generateBackupCodes();
 
-        $this->entityManager->wrapInTransaction(function () use ($user, $pendingSecret, $backupCodes): void {
+        // Vérification et bascule sous verrou du compte, dans une même
+        // transaction (atomicité et sérialisation des essais concurrents).
+        $denied = $this->underAccountLock($user, function () use ($user, $request, $backupCodes): ?JsonResponse {
+            if (null !== $limited = $this->consumeQuota($user)) {
+                return $limited;
+            }
+
+            $pendingSecret = $user->getTwoFactorPendingSecret();
+            if (!$pendingSecret) {
+                return $this->json(['error' => 'Please call /api/2fa/setup first'], 400);
+            }
+
+            $code = $this->readCode($request);
+            if ('' === $code) {
+                return $this->json(['error' => 'Code is required'], 400);
+            }
+
+            // Le compteur anti-rejeu repart de zéro pour un nouveau secret.
+            $previousTimestep = $user->getTwoFactorAuth()?->getLastUsedTimestep();
+            $user->getTwoFactorAuth()?->setLastUsedTimestep(null);
+            if (!$this->twoFactorService->verifyCode($user, $code, $pendingSecret)) {
+                $user->getTwoFactorAuth()?->setLastUsedTimestep($previousTimestep);
+                $this->recordFailure($user);
+
+                return $this->json(['error' => 'Invalid code'], 400);
+            }
+
             $user->setTwoFactorSecret($pendingSecret);
             $user->setTwoFactorPendingSecret(null);
             $user->setTwoFactorBackupCodes($this->twoFactorService->hashBackupCodes($backupCodes));
             $user->setTwoFactorEnabled(true);
             $user->revokeTokens();
+            // La clé API émise avant l'activation est révoquée.
+            $user->getApiKey()->revoke();
+
+            return null;
         });
+        if (null !== $denied) {
+            return $denied;
+        }
 
         $response = $this->json([
             'message' => '2FA enabled successfully',
@@ -161,29 +178,34 @@ class TwoFactorController extends AbstractController
             return $this->json(['error' => '2FA is not enabled'], 400);
         }
 
-        if (null !== $limited = $this->consumeQuota($user)) {
-            return $limited;
+        $denied = $this->underAccountLock($user, function () use ($user, $request): ?JsonResponse {
+            if (null !== $limited = $this->consumeQuota($user)) {
+                return $limited;
+            }
+
+            $code = $this->readCode($request);
+            if ('' === $code) {
+                return $this->json(['error' => 'Code is required to disable 2FA'], 400);
+            }
+
+            if (!$this->verifyCurrentFactor($user, $code, consumeBackup: false)) {
+                $this->recordFailure($user);
+
+                return $this->json(['error' => 'Invalid code'], 400);
+            }
+
+            // Désactiver et supprimer toutes les données 2FA
+            $user->setTwoFactorEnabled(false);
+            $user->setTwoFactorSecret(null);
+            $user->setTwoFactorPendingSecret(null);
+            $user->setTwoFactorBackupCodes(null);
+            $user->getTwoFactorAuth()?->setLastUsedTimestep(null);
+
+            return null;
+        });
+        if (null !== $denied) {
+            return $denied;
         }
-
-        $code = $this->readCode($request);
-        if ('' === $code) {
-            return $this->json(['error' => 'Code is required to disable 2FA'], 400);
-        }
-
-        if (!$this->verifyCurrentFactor($user, $code, consumeBackup: false)) {
-            $this->recordFailure($user);
-
-            return $this->json(['error' => 'Invalid code'], 400);
-        }
-
-        // Désactiver et supprimer toutes les données 2FA
-        $user->setTwoFactorEnabled(false);
-        $user->setTwoFactorSecret(null);
-        $user->setTwoFactorPendingSecret(null);
-        $user->setTwoFactorBackupCodes(null);
-        $user->getTwoFactorAuth()?->setLastUsedTimestep(null);
-
-        $this->entityManager->flush();
 
         return $this->json([
             'message' => '2FA disabled successfully'
@@ -234,21 +256,27 @@ class TwoFactorController extends AbstractController
                 throw new AccessDeniedException('This is not a 2FA token.');
             }
 
-            if (null !== $limited = $this->consumeQuota($user)) {
-                return $limited;
-            }
+            $denied = $this->underAccountLock($user, function () use ($user, $request): ?JsonResponse {
+                if (null !== $limited = $this->consumeQuota($user)) {
+                    return $limited;
+                }
 
-            $code = $this->readCode($request);
-            if ('' === $code) {
-                return $this->json(['error' => 'Code is required'], 400);
-            }
+                $code = $this->readCode($request);
+                if ('' === $code) {
+                    return $this->json(['error' => 'Code is required'], 400);
+                }
 
-            if (!$this->verifyCurrentFactor($user, $code, consumeBackup: true)) {
-                $this->recordFailure($user);
+                if (!$this->verifyCurrentFactor($user, $code, consumeBackup: true)) {
+                    $this->recordFailure($user);
 
-                return $this->json(['error' => 'Invalid code'], 400);
+                    return $this->json(['error' => 'Invalid code'], 400);
+                }
+
+                return null;
+            });
+            if (null !== $denied) {
+                return $denied;
             }
-            $this->entityManager->flush();
 
             try {
                 $blockedTokens->add($payload);
@@ -274,14 +302,38 @@ class TwoFactorController extends AbstractController
     }
 
     /**
+     * Exécute contrôle du quota, vérification du code et écriture de l'état 2FA
+     * sous verrou exclusif du compte (SELECT … FOR UPDATE sur `user` et
+     * `user_two_factor`), dans une transaction.
+     *
+     * Sans ce verrou, des vérifications concurrentes lisaient toutes le quota
+     * avant que la première n'enregistre son échec (plus de 5 essais évalués),
+     * et un même code de secours ou pas de temps TOTP pouvait être accepté
+     * deux fois. L'état est relu en base sous verrou avant toute décision.
+     *
+     * @template T
+     * @param callable(): T $action
+     * @return T
+     */
+    private function underAccountLock(User $user, callable $action): mixed
+    {
+        return $this->entityManager->wrapInTransaction(function () use ($user, $action): mixed {
+            $this->entityManager->refresh($user, LockMode::PESSIMISTIC_WRITE);
+            if (null !== $twoFactor = $user->getTwoFactorAuth()) {
+                $this->entityManager->refresh($twoFactor, LockMode::PESSIMISTIC_WRITE);
+            }
+
+            return $action();
+        });
+    }
+
+    /**
      * Vérifie un code du facteur ACTIF : TOTP (anti-rejeu) ou code de secours.
      * Un code de secours n'est consommé que lors de la connexion.
      */
     private function verifyCurrentFactor(User $user, string $code, bool $consumeBackup): bool
     {
         if ($this->twoFactorService->verifyCode($user, $code)) {
-            $this->entityManager->flush();
-
             return true;
         }
 
@@ -299,7 +351,9 @@ class TwoFactorController extends AbstractController
     /**
      * Quota dédié aux vérifications 2FA, par compte : seuls les ÉCHECS sont
      * comptés (5 par 5 minutes glissantes). Au-delà, toute vérification est
-     * refusée en 429 jusqu'à libération de la fenêtre.
+     * refusée en 429 jusqu'à libération de la fenêtre. Appelé uniquement sous
+     * underAccountLock() : lecture du quota et enregistrement de l'échec ne
+     * peuvent pas être entrelacés entre deux requêtes du même compte.
      */
     private function consumeQuota(User $user): ?JsonResponse
     {

@@ -14,7 +14,9 @@ use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
 use App\Repository\UserRepository;
+use App\State\UserDeleteProcessor;
 use App\State\UserPasswordProcessor;
+use ApiPlatform\Metadata\ApiProperty;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
@@ -55,16 +57,19 @@ use DateTimeImmutable;
         new Get(
             security: "is_granted('ROLE_ADMIN') or object == user"
         ),
+        // USER_EDIT / USER_DELETE (UserVoter) : soi-même, ou administrateur
+        // sur un compte de rang inférieur ou égal (jamais un super-admin).
         new Put(
-            security: "is_granted('ROLE_ADMIN') or object == user",
+            security: "is_granted('USER_EDIT', object)",
             processor: UserPasswordProcessor::class
         ),
         new Patch(
-            security: "is_granted('ROLE_ADMIN') or object == user",
+            security: "is_granted('USER_EDIT', object)",
             processor: UserPasswordProcessor::class
         ),
         new Delete(
-            security: "is_granted('ROLE_ADMIN') or object == user"
+            security: "is_granted('USER_DELETE', object)",
+            processor: UserDeleteProcessor::class
         ),
     ],
     // GraphQL : mêmes règles et mêmes groupes que REST. Sans liste explicite,
@@ -80,12 +85,13 @@ use DateTimeImmutable;
         ),
         new Mutation(
             name: 'update',
-            security: "is_granted('ROLE_ADMIN') or object == user",
+            security: "is_granted('USER_EDIT', object)",
             processor: UserPasswordProcessor::class
         ),
         new DeleteMutation(
             name: 'delete',
-            security: "is_granted('ROLE_ADMIN') or object == user"
+            security: "is_granted('USER_DELETE', object)",
+            processor: UserDeleteProcessor::class
         ),
     ]
 )]
@@ -131,6 +137,9 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\ManyToOne(targetEntity: MediaObject::class, inversedBy: 'users')]
     #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
     #[Groups(['user:read', 'user:write'])]
+    // Propriété : on ne prend comme photo qu'un média qu'on a soi-même envoyé
+    // (ou celui déjà en place). Un administrateur n'est pas limité.
+    #[ApiProperty(securityPostDenormalize: "is_granted('ROLE_ADMIN') or object.getPhoto() === null or (previous_object !== null and previous_object.getPhoto() === object.getPhoto()) or (user !== null and object.getPhoto().getOwner() !== null and object.getPhoto().getOwner().getId() === user.getId())")]
     private ?MediaObject $photo = null;
 
     /**
@@ -153,6 +162,17 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     )]
     #[Groups(['user:write'])]
     private ?string $plainPassword = null;
+
+    /**
+     * Réauthentification : mot de passe actuel exigé pour changer son propre
+     * mot de passe ou son e-mail (UserPasswordProcessor). Jamais persisté.
+     */
+    #[Groups(['user:write'])]
+    private ?string $currentPassword = null;
+
+    /** Code TOTP exigé en plus du mot de passe actuel si la 2FA est active. */
+    #[Groups(['user:write'])]
+    private ?string $twoFactorCode = null;
 
     #[ORM\Column(nullable: true)]
     private ?int $limiter = null;
@@ -240,6 +260,28 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setPlainPassword(?string $plainPassword): static
     {
         $this->plainPassword = $plainPassword;
+        return $this;
+    }
+
+    public function getCurrentPassword(): ?string
+    {
+        return $this->currentPassword;
+    }
+
+    public function setCurrentPassword(?string $currentPassword): static
+    {
+        $this->currentPassword = $currentPassword;
+        return $this;
+    }
+
+    public function getTwoFactorCode(): ?string
+    {
+        return $this->twoFactorCode;
+    }
+
+    public function setTwoFactorCode(?string $twoFactorCode): static
+    {
+        $this->twoFactorCode = $twoFactorCode;
         return $this;
     }
 

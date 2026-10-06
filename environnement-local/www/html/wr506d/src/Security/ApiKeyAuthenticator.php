@@ -66,6 +66,13 @@ class ApiKeyAuthenticator extends AbstractAuthenticator
             throw new CustomUserMessageAuthenticationException('Invalid API key');
         }
 
+        // 4. Clé émise pour une version de session révolue (mot de passe
+        // changé, 2FA activée, rôle modifié…) : refusée.
+        $keyVersion = $user->getApiKey()->getTokenVersion();
+        if (null !== $keyVersion && $keyVersion !== $user->getTokenVersion()) {
+            throw new CustomUserMessageAuthenticationException('API key revoked');
+        }
+
         return new SelfValidatingPassport(
             new UserBadge($user->getUserIdentifier())
         );

@@ -39,7 +39,14 @@ final class CookieCsrfSubscriber implements EventSubscriberInterface
 
         $request = $event->getRequest();
 
-        if ($request->isMethodSafe() || $request->isMethod('OPTIONS')) {
+        if ($request->isMethod('OPTIONS')) {
+            return;
+        }
+
+        // GraphQL : contrôlé quelle que soit la méthode (une requête GET peut
+        // y porter une opération).
+        $isGraphQl = GraphQlMethodSubscriber::PATH === rtrim($request->getPathInfo(), '/');
+        if ($request->isMethodSafe() && !$isGraphQl) {
             return;
         }
 

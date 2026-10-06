@@ -26,7 +26,8 @@ use Vich\UploaderBundle\Mapping\Attribute as Vich;
     outputFormats: ['jsonld' => ['application/ld+json']],
     operations: [
         new Get(security: "is_granted('PUBLIC_ACCESS')"),
-        new GetCollection(security: "is_granted('PUBLIC_ACCESS')"),
+        // La liste de tous les médias est une donnée d'administration.
+        new GetCollection(security: "is_granted('ROLE_ADMIN')"),
         // L'envoi de fichiers était ouvert à tout le monde : n'importe qui
         // pouvait remplir le disque du VPS depuis Internet. Il faut désormais
         // un compte — l'inscription envoie l'avatar après création du compte.
@@ -58,7 +59,7 @@ use Vich\UploaderBundle\Mapping\Attribute as Vich;
     // mutation GraphQL n'est exposée (REST n'offre ni modification ni suppression).
     graphQlOperations: [
         new Query(security: "is_granted('PUBLIC_ACCESS')"),
-        new QueryCollection(security: "is_granted('PUBLIC_ACCESS')"),
+        new QueryCollection(security: "is_granted('ROLE_ADMIN')"),
     ]
 )]
 class MediaObject
@@ -107,6 +108,14 @@ class MediaObject
     public ?string $filePath = null;
 
     /**
+     * Compte qui a envoyé le fichier (jamais exposé). Sert au contrôle de
+     * propriété de User::$photo et au nettoyage à la suppression du compte.
+     */
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?User $owner = null;
+
+    /**
      * @var Collection<int, Actor>
      */
     #[ORM\OneToMany(targetEntity: Actor::class, mappedBy: 'photo')]
@@ -134,6 +143,18 @@ class MediaObject
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getOwner(): ?User
+    {
+        return $this->owner;
+    }
+
+    public function setOwner(?User $owner): static
+    {
+        $this->owner = $owner;
+
+        return $this;
     }
 
     /**

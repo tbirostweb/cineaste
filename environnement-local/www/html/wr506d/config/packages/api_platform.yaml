@@ -40,8 +40,11 @@ api_platform:
 
 # En production : ni IDE GraphiQL ni introspection du schéma. Les opérations
 # restent disponibles, protégées par les mêmes expressions de sécurité que REST.
+# La documentation (/api/docs, Swagger UI) n'est servie qu'en dev et en test :
+# le front ne s'en sert pas.
 when@prod:
     api_platform:
+        enable_docs: false
         graphql:
             graphiql:
                 enabled: false
