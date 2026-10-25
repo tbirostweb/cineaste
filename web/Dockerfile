@@ -30,7 +30,7 @@ ARG VITE_ANALYTICS_DOMAIN
 RUN npm run build
 
 # ---- Étape 2 : service statique -------------------------------------------
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30.6-alpine AS runtime
 
 RUN rm /etc/nginx/conf.d/default.conf && mkdir -p /etc/nginx/snippets
 COPY nginx.conf /etc/nginx/conf.d/app.conf
